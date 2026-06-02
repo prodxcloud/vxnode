@@ -1,0 +1,53 @@
+# =============================================================================
+#  vxcloud vxnode — node container (template)
+#
+#  Drop this into your deploy dir (e.g. /opt/vxcloud/) and `docker compose up -d`.
+#  See the README "Deploy a node" steps. SSL is handled by Nginx + Let's Encrypt
+#  on the host, not inside Docker.
+#
+#  Self-update: the in-container listener (VXNODE_AUTO_UPDATE=true) polls the
+#  channel manifest and writes a trigger into ./generated; the host unit
+#  update/vxnode-update.sh performs the pull + recreate + health-gated rollback.
+# =============================================================================
+services:
+
+  vxnode:
+    container_name: ${CONTAINER_NAME:-vxcloud-vxnode}
+    image: ${DOCKER_IMAGE:-vxcloud/vxnode:latest}
+    restart: unless-stopped
+    cpus: ${VXNODE_CPUS:-1.0}
+    mem_limit: ${VXNODE_MEMORY:-512m}
+    environment:
+      - GIN_MODE=release
+      - PORT=${APP_PORT:-8744}
+      # ── self-update listener (opt-in) ──
+      - VXNODE_AUTO_UPDATE=true
+      - VXNODE_UPDATE_CHANNEL_URL=${VXNODE_UPDATE_CHANNEL_URL:-https://vxcloud.io/download/vxnode/stable.json}
+      - VXNODE_UPDATE_INTERVAL=${VXNODE_UPDATE_INTERVAL:-15m}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8744}:${APP_PORT:-8744}"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${APP_PORT:-8744}/api/v2/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # ./generated is shared with the host so the update trigger written by the
+      # in-container listener is visible to update/vxnode-update.sh on the host.
+      - ./generated:/app/generated
+    tmpfs:
+      - /tmp:size=64M
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

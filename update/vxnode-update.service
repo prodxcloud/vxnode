@@ -1,0 +1,12 @@
+[Unit]
+Description=vxnode self-update (pull + recreate when the channel digest changes)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/vxcloud/update/vxnode-update.sh
+# Tunables: override the channel (e.g. canary) per node here.
+# Environment=CHANNEL_URL=https://vxcloud.io/download/vxnode/canary.json
+Nice=10

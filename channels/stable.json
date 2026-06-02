@@ -1,0 +1,7 @@
+{
+  "image": "vxcloud/vxnode",
+  "tag": "latest",
+  "digest": "sha256:c80c4c9fb6fb2bdf35ed8fad8c978cf1f12c7ab7dcded6dcbbaec769f40a1f6c",
+  "min_interval_seconds": 900,
+  "notes": "stable channel — bump 'digest' to the new multi-arch manifest digest on each production push"
+}
