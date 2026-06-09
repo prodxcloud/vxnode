@@ -1,8 +1,8 @@
 {
   "image": "vxcloud/vxnode",
   "tag": "latest",
-  "version": "v2026.6.9-1",
-  "digest": "sha256:114386c8cb5d1ef9fe896ac0b2d3b6b32dbb16e0510b6d0f8dca68b18a6eb099",
+  "version": "v2026.6.10-1",
+  "digest": "sha256:89084d0857f921380c80a1395d68296f31184cb0043b61f56c30c37968dc0349",
   "min_interval_seconds": 300,
-  "notes": "stable channel — bump 'version' AND 'digest' together on each prod push (build.sh prints the JSON to paste here). Fleet polls every 5 min."
+  "notes": "v2026.6.10-1 — production build, multi-arch, full 7-layer obfuscation. Fleet polls every 5 min."
 }
