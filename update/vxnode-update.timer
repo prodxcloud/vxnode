@@ -1,9 +1,12 @@
 [Unit]
-Description=Run vxnode self-update periodically
+Description=Run vxnode self-update every 5 minutes
 
 [Timer]
+# 2-min boot grace so the container is ready, then 5-min cadence matching the
+# in-binary listener's poll interval. A faster timer would race the listener;
+# slower would let dashboard "Update now" clicks lag.
 OnBootSec=2min
-OnUnitActiveSec=15min
+OnUnitActiveSec=5min
 Persistent=true
 
 [Install]

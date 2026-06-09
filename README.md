@@ -50,7 +50,7 @@ one-shot installer.
 ## 📁 Repository layout
 ```
 install/
-  tools.sh             # one-time host prep (docker, compose, terraform, node, redis, python, jq…)
+  prerequisites.sh             # one-time host prep (docker, compose, terraform, node, redis, python, jq…)
   docker-compose.yml   # the node container template (self-update enabled)
 channels/
   stable.json          # desired image digest for the fleet (the "what version" pointer)
@@ -67,7 +67,7 @@ On a fresh Ubuntu 22.04/24.04 VM with a DNS A record pointing at it. The image i
 
 **1 · Install host prerequisites**
 ```bash
-sudo bash install/tools.sh
+sudo bash install/prerequisites.sh
 ```
 
 **2 · Deploy the node container**
@@ -115,6 +115,57 @@ sudo bash update/install-updater.sh
 ```
 Open ports `80`, `443` (and `22`) in the VM's firewall / security group.
 
+## 🪟 Deploy a node — Windows
+Windows is supported via **Docker Desktop** with the WSL2 backend (the vxnode
+image is Linux-only — the host is Windows, the container is Linux). Docker
+Engine native Linux mode is not supported on Windows hosts.
+
+**1 · Prerequisites** — install [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/),
+enable the WSL2 backend, and confirm:
+```powershell
+docker version           # Server: Linux engine via WSL2
+docker compose version
+```
+
+**2 · Deploy the node container** (PowerShell, no elevation needed if your user
+is in the `docker-users` group):
+```powershell
+$DeployDir = "$env:ProgramData\vxcloud"
+New-Item -ItemType Directory -Force -Path $DeployDir,"$DeployDir\generated" | Out-Null
+Copy-Item .\install\docker-compose.yml "$DeployDir\docker-compose.yml"
+cd $DeployDir
+docker compose up -d
+Invoke-WebRequest http://127.0.0.1:8744/api/v2/health -UseBasicParsing   # expect 200
+```
+
+**3 · Reverse proxy + HTTPS** — the Linux step uses Nginx + Let's Encrypt;
+on Windows you'd typically:
+- run a Nginx-in-Docker sidecar, **or**
+- put the host behind IIS with ARR + URL Rewrite, **or**
+- park it behind a managed front (Cloudflare, AWS ALB, Azure App Gateway).
+
+The exact recipe is environment-specific — the only requirement is that
+HTTPS terminates on the host and proxies plain HTTP to `127.0.0.1:8744`.
+
+**4 · Enable auto-update** (PowerShell, **as Administrator**):
+```powershell
+powershell -ExecutionPolicy Bypass -File .\update\windows\install-updater.ps1
+# canary host:
+powershell -ExecutionPolicy Bypass -File .\update\windows\install-updater.ps1 `
+    -ChannelUrl https://vxcloud.io/download/vxnode/canary.json
+# uninstall:
+powershell -ExecutionPolicy Bypass -File .\update\windows\install-updater.ps1 -Uninstall
+```
+This registers a Scheduled Task (`vxnode-update`) that runs as `SYSTEM` every
+5 minutes — the Windows equivalent of the systemd timer on Linux. Same
+health-gated pull + recreate + rollback semantics, same `/api/v2/version`
+endpoint, same channel JSON. Logs go to `%ProgramData%\vxcloud\update\vxnode-update.log`.
+
+Tail the log:
+```powershell
+Get-Content "$env:ProgramData\vxcloud\update\vxnode-update.log" -Tail 50 -Wait
+```
+
 ## 🔄 How auto-update works
 ```
 You push a new image  ─►  Docker Hub (vxcloud/vxnode, new hardened build)
@@ -132,7 +183,7 @@ to validate a digest before promoting it to `stable.json`.
 
 > **Cut a release:** push the image → copy its multi-arch manifest digest into
 > `channels/stable.json` (and your CDN copy at `/download/vxnode/stable.json`) →
-> nodes converge within ~15 min.
+> nodes converge within ~5 min.
 
 ## 📦 Use a node from your machine
 **CLI**

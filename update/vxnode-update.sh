@@ -2,7 +2,7 @@
 # =============================================================================
 #  vxnode-update.sh — host-side fleet updater (the "hands")
 #
-#  Runs on a systemd timer (every ~15 min). Compares the channel manifest's
+#  Runs on a systemd timer (every ~5 min). Compares the channel manifest's
 #  desired image digest to the digest the node is currently running; if they
 #  differ it pulls the new digest, recreates the container, health-gates it,
 #  and ROLLS BACK to the previous digest if the new one doesn't come up.

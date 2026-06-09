@@ -20,10 +20,13 @@ services:
     environment:
       - GIN_MODE=release
       - PORT=${APP_PORT:-8744}
-      # ── self-update listener (opt-in) ──
-      - VXNODE_AUTO_UPDATE=true
+      # ── self-update listener (on by default — opt out with VXNODE_AUTO_UPDATE=false) ──
+      # The in-binary listener also serves GET /api/v2/version and
+      # POST /api/v2/update/trigger so the dashboard can see the running
+      # version and force-update individual nodes.
+      - VXNODE_AUTO_UPDATE=${VXNODE_AUTO_UPDATE:-true}
       - VXNODE_UPDATE_CHANNEL_URL=${VXNODE_UPDATE_CHANNEL_URL:-https://vxcloud.io/download/vxnode/stable.json}
-      - VXNODE_UPDATE_INTERVAL=${VXNODE_UPDATE_INTERVAL:-15m}
+      - VXNODE_UPDATE_INTERVAL=${VXNODE_UPDATE_INTERVAL:-5m}
     ports:
       - "127.0.0.1:${APP_PORT:-8744}:${APP_PORT:-8744}"
     healthcheck:

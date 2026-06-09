@@ -31,7 +31,7 @@ fi
 
 systemctl daemon-reload
 systemctl enable --now vxnode-update.timer
-echo "✓ vxnode-update.timer enabled — next run in ~2min, then every 15min"
+echo "✓ vxnode-update.timer enabled — next run in ~2min, then every 5min"
 echo "  logs:   tail -f $DEPLOY_DIR/update/vxnode-update.log"
 echo "  manual: sudo systemctl start vxnode-update.service"
 echo "  status: systemctl list-timers vxnode-update.timer"
