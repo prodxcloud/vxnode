@@ -2,7 +2,7 @@
   "image": "vxcloud/vxnode",
   "tag": "latest",
   "version": "v2026.6.10-1",
-  "digest": "sha256:89084d0857f921380c80a1395d68296f31184cb0043b61f56c30c37968dc0349",
+  "digest": "sha256:767b727363be9090fe429c038f411eca3fa336201cd248ce25c922511f292bc9",
   "min_interval_seconds": 300,
-  "notes": "v2026.6.10-1 — production build, multi-arch, full 7-layer obfuscation. Fleet polls every 5 min."
+  "notes": "v2026.6.10-1 (rebuild) — CORS broadening (localhost, prodxcloud.com, joelwembo.com, desktop/mobile app schemes, LAN, no-origin) + /api/v2/version. Multi-arch, MODE=prod. Fleet polls every 5 min."
 }
