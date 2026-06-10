@@ -1,8 +1,8 @@
 {
   "image": "vxcloud/vxnode",
   "tag": "latest",
-  "version": "v2026.6.10-1",
-  "digest": "sha256:767b727363be9090fe429c038f411eca3fa336201cd248ce25c922511f292bc9",
+  "version": "v2026.6.10-1324",
+  "digest": "sha256:4cce1b49c17a31c629c55b5dd21b4496b0b3a5c76213d08a5156c14ee2355f27",
   "min_interval_seconds": 300,
-  "notes": "v2026.6.10-1 (rebuild) — CORS broadening (localhost, prodxcloud.com, joelwembo.com, desktop/mobile app schemes, LAN, no-origin) + /api/v2/version. Multi-arch, MODE=prod. Fleet polls every 5 min."
+  "notes": "v2026.6.10-1324 — terminal/shell WS auth: trusted-origin + accessToken-cookie fallback so the dashboard Cloud Shell connects even without a provisioned developer key. Multi-arch, MODE=prod. Fleet polls every 5 min."
 }

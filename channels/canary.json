@@ -1,8 +1,8 @@
 {
   "image": "vxcloud/vxnode",
   "tag": "latest",
-  "version": "v2026.6.10-1",
-  "digest": "sha256:89084d0857f921380c80a1395d68296f31184cb0043b61f56c30c37968dc0349",
+  "version": "v2026.6.10-1324",
+  "digest": "sha256:4cce1b49c17a31c629c55b5dd21b4496b0b3a5c76213d08a5156c14ee2355f27",
   "min_interval_seconds": 300,
-  "notes": "canary channel — point one node here (VXNODE_UPDATE_CHANNEL_URL=.../canary.json) to test a new digest+version before promoting to stable.json"
+  "notes": "canary mirrors stable (single prod stage) — same digest/version as stable.json (v2026.6.10-1324)."
 }
