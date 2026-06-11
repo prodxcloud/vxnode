@@ -82,7 +82,7 @@ set -euo pipefail
 
 # ---- Hardcoded credentials / identity -------------------------------
 GH_USER="joelwembo"
-GH_TOKEN="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"
+GH_TOKEN=""
 GH_ORG="vxcloud"
 GIT_EMAIL="${GH_USER}@users.noreply.github.com"
 GIT_NAME="${GH_USER}"
