@@ -443,6 +443,6 @@ go get github.com/prodxcloud/vxcloud     # Go
 
 **[vxcloud.io](https://vxcloud.io)** · [Docs](https://vxcloud.io/docs) · [CLI](https://vxcloud.io/download/cli) · [SDK](https://github.com/prodxcloud/vxcloud) · [Docker Hub](https://hub.docker.com/r/vxcloud/vxnode)
 
-© PRODXCLOUD — built by [Joel O. Wembo](https://github.com/joelwembo)
+© PRODXCLOUD — built by [Joel O. Wembo](https://github.com/joelwembo || https://www.linkedin.com/in/joelwembo/ )
 
 </div>
