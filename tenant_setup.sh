@@ -327,6 +327,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DEPLOY_DIR}/generated:/app/generated
+      # Persist /app/.env on the host so credentials synced into the container
+      # (VAULT_ROLE_ID/SECRET_ID, DEVELOPER_API_KEY, ...) survive container
+      # recreate AND auto-update — instead of living only in the writable layer
+      # and being wiped on every redeploy. tenant_setup seeds/validates this
+      # file just before 'compose up'; the mount is dropped if it can't.
+      - ${DEPLOY_DIR}/.env:/app/.env
     tmpfs:
       - /tmp:size=64M
     pids_limit: 100
@@ -338,6 +344,24 @@ services:
 COMPOSE_EOF
 
 log_success "docker-compose.yml created at $DEPLOY_DIR/"
+
+# -----------------------------------------------------------------------------
+# Persist .env — Phase A: capture an ALREADY-RUNNING container's /app/.env
+# BEFORE we tear it down. Creds synced via the dashboard live only in the
+# container's writable layer, so without this they vanish on redeploy. Only
+# seed when no host .env exists yet — never clobber a previously persisted one.
+# -----------------------------------------------------------------------------
+HOST_ENV="$DEPLOY_DIR/.env"
+if [ ! -f "$HOST_ENV" ] && docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    if docker cp "${CONTAINER_NAME}:/app/.env" "$HOST_ENV" 2>/dev/null && [ -s "$HOST_ENV" ]; then
+        chmod 666 "$HOST_ENV" 2>/dev/null || true
+        log_success "Preserved current container .env -> $HOST_ENV (synced creds will survive recreate/update)"
+    else
+        rm -f "$HOST_ENV" 2>/dev/null || true
+    fi
+elif [ -f "$HOST_ENV" ]; then
+    log_info "Host .env already present at $HOST_ENV — keeping it (creds persist across recreate/update)"
+fi
 
 # =============================================================================
 # STEP 3: FREE PORT & DEPLOY CONTAINER
@@ -414,6 +438,33 @@ else
             ;;
     esac
     exit 1
+fi
+
+# -----------------------------------------------------------------------------
+# Persist .env — Phase B: ensure the bind-mount target is a VALID file before
+# 'compose up'. Phase A already handled an existing container. If there's still
+# no host .env (fresh install), seed it from the freshly-pulled image's baked
+# /app/.env. A missing bind source would make Docker create an empty DIRECTORY
+# and an empty/garbage .env would shadow the image's good one — so if we can't
+# produce a valid .env (must contain the built-in API_USERNAME), drop the mount
+# and let the container use its baked .env instead.
+# -----------------------------------------------------------------------------
+HOST_ENV="$DEPLOY_DIR/.env"
+if [ ! -f "$HOST_ENV" ]; then
+    ENV_SEED_TMP="vxnode-envseed-$$"
+    if docker create --name "$ENV_SEED_TMP" "$DOCKER_IMAGE" >/dev/null 2>&1; then
+        docker cp "${ENV_SEED_TMP}:/app/.env" "$HOST_ENV" 2>/dev/null || true
+        docker rm -f "$ENV_SEED_TMP" >/dev/null 2>&1 || true
+    fi
+    [ -f "$HOST_ENV" ] && log_info "Seeded host .env from image template: $HOST_ENV"
+fi
+if [ -f "$HOST_ENV" ] && grep -q "API_USERNAME" "$HOST_ENV" 2>/dev/null; then
+    chmod 666 "$HOST_ENV" 2>/dev/null || true
+    log_success "Host-persisted .env active: $HOST_ENV -> /app/.env"
+else
+    log_warn "No valid host .env — dropping the .env bind mount (container uses baked .env; synced creds will NOT persist)."
+    sed -i '/:\/app\/\.env$/d' "$DEPLOY_DIR/docker-compose.yml"
+    rm -f "$HOST_ENV" 2>/dev/null || true
 fi
 
 log_info "Starting container via docker compose..."
@@ -874,6 +925,28 @@ LOG="${LOG:-$DEPLOY_DIR/update/vxnode-update.log}"
 LOCK="${LOCK:-/tmp/vxnode-update.lock}"
 mkdir -p "$(dirname "$LOG")"
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$LOG"; }
+# Seed a missing host .env (declared in compose) before recreating, so the bind
+# mount never becomes an empty dir and wipes synced creds.
+ensure_env_file() {
+    local envsrc tmpc
+    envsrc=$(grep -oE '[^[:space:]]+:/app/\.env([[:space:]]|$)' "$COMPOSE_FILE" 2>/dev/null | head -n1 | sed -E 's#:/app/\.env.*##' || true)
+    if [ -z "$envsrc" ]; then return 0; fi
+    case "$envsrc" in ./*) envsrc="$DEPLOY_DIR/${envsrc#./}" ;; esac
+    if [ -f "$envsrc" ]; then return 0; fi
+    log "host .env ($envsrc) declared in compose but missing — seeding to avoid a broken bind mount"
+    if docker cp "${CONTAINER_NAME}:/app/.env" "$envsrc" 2>/dev/null && [ -s "$envsrc" ]; then
+        log "  seeded .env from running container (creds preserved)"
+    else
+        tmpc="vxnode-envseed-$$"
+        if docker create --name "$tmpc" "${IMAGE}@${desired}" >/dev/null 2>&1; then
+            docker cp "${tmpc}:/app/.env" "$envsrc" 2>/dev/null || true
+            docker rm -f "$tmpc" >/dev/null 2>&1 || true
+            if [ -f "$envsrc" ]; then log "  seeded .env from image template"; fi
+        fi
+    fi
+    chmod 666 "$envsrc" 2>/dev/null || true
+    return 0
+}
 exec 9>"$LOCK"; flock -n 9 || { log "another update run holds the lock — exiting"; exit 0; }
 desired=""
 if manifest=$(curl -fsSL --max-time 15 "$CHANNEL_URL" 2>/dev/null); then
@@ -893,6 +966,7 @@ if ! docker pull "${IMAGE}@${desired}" >>"$LOG" 2>&1; then
     log "ERROR: pull ${IMAGE}@${desired} failed — keeping current image"; exit 1
 fi
 docker tag "${IMAGE}@${desired}" "${IMAGE}:${TAG}"
+ensure_env_file
 cd "$DEPLOY_DIR"
 docker compose -f "$COMPOSE_FILE" up -d >>"$LOG" 2>&1
 healthy=false

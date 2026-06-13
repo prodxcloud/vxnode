@@ -34,6 +34,32 @@ LOCK="${LOCK:-/tmp/vxnode-update.lock}"
 mkdir -p "$(dirname "$LOG")"
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$LOG"; }
 
+# Resilience: if the compose declares a host .env bind mount but that file is
+# missing, Docker would create an empty DIRECTORY at the path and break
+# /app/.env (synced creds gone). Seed it from the running container (preserves
+# creds) or the desired image BEFORE recreating. No-op when the compose has no
+# .env mount or the file already exists.
+ensure_env_file() {
+    local envsrc tmpc
+    envsrc=$(grep -oE '[^[:space:]]+:/app/\.env([[:space:]]|$)' "$COMPOSE_FILE" 2>/dev/null | head -n1 | sed -E 's#:/app/\.env.*##' || true)
+    if [ -z "$envsrc" ]; then return 0; fi
+    case "$envsrc" in ./*) envsrc="$DEPLOY_DIR/${envsrc#./}" ;; esac
+    if [ -f "$envsrc" ]; then return 0; fi
+    log "host .env ($envsrc) is declared in compose but missing — seeding to avoid a broken bind mount"
+    if docker cp "${CONTAINER_NAME}:/app/.env" "$envsrc" 2>/dev/null && [ -s "$envsrc" ]; then
+        log "  seeded .env from running container (creds preserved)"
+    else
+        tmpc="vxnode-envseed-$$"
+        if docker create --name "$tmpc" "${IMAGE}@${desired}" >/dev/null 2>&1; then
+            docker cp "${tmpc}:/app/.env" "$envsrc" 2>/dev/null || true
+            docker rm -f "$tmpc" >/dev/null 2>&1 || true
+            if [ -f "$envsrc" ]; then log "  seeded .env from image template"; fi
+        fi
+    fi
+    chmod 666 "$envsrc" 2>/dev/null || true
+    return 0
+}
+
 # Single-flight: never run two updates at once.
 exec 9>"$LOCK"
 flock -n 9 || { log "another update run holds the lock — exiting"; exit 0; }
@@ -71,6 +97,8 @@ if ! docker pull "${IMAGE}@${desired}" >>"$LOG" 2>&1; then
     exit 1
 fi
 docker tag "${IMAGE}@${desired}" "${IMAGE}:${TAG}"
+
+ensure_env_file   # never let a missing host .env turn the bind mount into a dir
 
 cd "$DEPLOY_DIR"
 docker compose -f "$COMPOSE_FILE" up -d >>"$LOG" 2>&1

@@ -253,6 +253,7 @@ sudo bash install/prerequisites.sh
 ```bash
 sudo mkdir -p /opt/vxcloud/generated && cd /opt/vxcloud
 sudo cp /path/to/install/docker-compose.yml .
+sudo cp /path/to/.env.tenant .env                  # required: compose mounts ./.env so synced creds persist across recreate/update
 sudo docker compose up -d
 curl -fsS http://127.0.0.1:8744/api/v2/health      # expect 200
 ```
@@ -352,6 +353,7 @@ docker compose version
 $DeployDir = "$env:ProgramData\vxcloud"
 New-Item -ItemType Directory -Force -Path $DeployDir,"$DeployDir\generated" | Out-Null
 Copy-Item .\install\docker-compose.yml "$DeployDir\docker-compose.yml"
+Copy-Item .\.env.tenant "$DeployDir\.env"          # required: compose mounts ./.env so synced creds persist
 cd $DeployDir
 docker compose up -d
 Invoke-WebRequest http://127.0.0.1:8744/api/v2/health -UseBasicParsing   # expect 200

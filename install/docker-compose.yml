@@ -46,6 +46,12 @@ services:
       # ./generated is shared with the host so the update trigger written by the
       # in-container listener is visible to update/vxnode-update.sh on the host.
       - ./generated:/app/generated
+      # Persist .env on the host so credentials (VAULT_ROLE_ID/SECRET_ID,
+      # DEVELOPER_API_KEY, ...) survive container recreate AND auto-update
+      # instead of living only in the writable layer.
+      # REQUIRED: create the file first  ->  cp .env.tenant .env
+      # (Docker would create an empty DIRECTORY here if ./.env is missing.)
+      - ./.env:/app/.env
     tmpfs:
       - /tmp:size=64M
     pids_limit: 100

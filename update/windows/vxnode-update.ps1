@@ -49,6 +49,42 @@ function Write-Log {
     Add-Content -Path $LogFile -Value $line -Encoding UTF8
 }
 
+# ── .env persistence guard ─────────────────────────────────────────────────
+# If the compose declares a host .env bind mount but that file is missing,
+# Docker would create an empty DIRECTORY at the path and break /app/.env
+# (synced creds gone). Seed it from the running container (preserves creds) or
+# the desired image BEFORE recreating. No-op when there's no .env mount or the
+# file already exists. Mirrors ensure_env_file() in update/vxnode-update.sh.
+function Ensure-EnvFile {
+    param([string]$Desired)
+    if (-not (Test-Path $ComposeFile)) { return }
+    $envSrc = $null
+    foreach ($line in (Get-Content $ComposeFile)) {
+        if ($line -match '^\s*-\s*(.+?):/app/\.env\s*$') { $envSrc = $Matches[1].Trim(); break }
+    }
+    if (-not $envSrc) { return }
+    # Resolve a relative (./x or x) mount source against the deploy dir; keep absolute paths.
+    if ($envSrc -match '^\.[\\/]') { $envSrc = Join-Path $DeployDir ($envSrc -replace '^\.[\\/]','') }
+    elseif (-not [System.IO.Path]::IsPathRooted($envSrc)) { $envSrc = Join-Path $DeployDir $envSrc }
+    if (Test-Path $envSrc) { return }
+    Write-Log "host .env ($envSrc) declared in compose but missing — seeding to avoid a broken bind mount"
+    # 1) Preserve creds already synced into the running container.
+    & docker cp "${ContainerName}:/app/.env" $envSrc 2>$null | Out-Null
+    if ((Test-Path $envSrc) -and ((Get-Item $envSrc).Length -gt 0)) {
+        Write-Log "  seeded .env from running container (creds preserved)"
+    } else {
+        if (Test-Path $envSrc) { Remove-Item $envSrc -Force -ErrorAction SilentlyContinue }
+        # 2) Fresh: seed from the desired image's baked template.
+        $tmpc = "vxnode-envseed-$PID"
+        & docker create --name $tmpc "$Image@$Desired" 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            & docker cp "${tmpc}:/app/.env" $envSrc 2>$null | Out-Null
+            & docker rm -f $tmpc 2>$null | Out-Null
+            if (Test-Path $envSrc) { Write-Log "  seeded .env from image template" }
+        }
+    }
+}
+
 # ── Single-flight: a Global mutex so two timer fires don't collide ─────────
 # Windows has no flock(2); a named mutex serves the same purpose. Released
 # automatically when the process exits even on crash.
@@ -107,6 +143,8 @@ try {
         exit 1
     }
     & docker tag "$Image@$desired" "${Image}:${Tag}" 2>&1 | Out-Null
+
+    Ensure-EnvFile -Desired $desired   # never let a missing host .env turn the bind mount into a dir
 
     Push-Location $DeployDir
     try {
