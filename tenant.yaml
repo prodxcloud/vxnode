@@ -1,0 +1,42 @@
+# =============================================================================
+#  vxnode — tenant onboarding config   (consumed by setup.sh)
+# =============================================================================
+#  setup.sh installs vxnode on EVERY instance listed below — one, two, or many:
+#      1) tenant_prerequisites.sh   (Docker, packages, registry auth)
+#      2) tenant_setup.sh           (vxnode container + nginx + SSL)
+#  Codebase/IDE installers and tenant agents are NOT run here — vxnode comes up
+#  first; provision those afterward (tenant_codebase/, tenant_agents/).
+#
+#  RUN:
+#      ./setup.sh                       # all instances in this file
+#      ./setup.sh --only louis000c2d8b4eerbestbetter001
+#      ./setup.sh --list                # show resolved instances, do nothing
+#
+#  This YAML is the source of truth. tenant.json is an exact mirror used
+#  automatically only if a YAML parser (python3 PyYAML) is unavailable.
+#
+#  `defaults` apply to every instance unless the instance overrides the key.
+#  Leave ssh_host blank on an instance to install on THIS machine (local).
+# =============================================================================
+
+defaults:
+  email: joelwembo@outlook.com        # Let's Encrypt SSL contact (shared)
+  ssh_port: 22
+  docker_username: vxcloud            # image-pull user (demo)
+  docker_pat: ""                      # set ONLY if vxcloud/vxnode is private
+  app_port: 8744                      # vxnode API port
+
+instances:
+  # ── Instance 1 — AWS ──────────────────────────────────────────────────────
+  - name: louis000c2d8b4eerbestbetter001
+    ssh_host: 54.224.217.6                                    # public IP (reliable for SSH)
+    ssh_user: ubuntu
+    ssh_key: ./files/louis000c2d8b4eerbestbetter001.pem
+    domain: louis000c2d8b4eerbestbetter001.prodxcloud.space  # FQDN for nginx + SSL
+
+  # ── Instance 2 — VPS (keypair "VPS1") ─────────────────────────────────────
+  - name: vps1
+    ssh_host: 34.87.72.177
+    ssh_user: root
+    ssh_key: ./files/vpskey1.pem
+    domain: services.vxai.site

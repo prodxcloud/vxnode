@@ -52,7 +52,7 @@ set -euo pipefail
 # =============================================================================
 # CONFIGURATION — Override via environment variables if needed
 # =============================================================================
-DOMAIN="${DOMAIN:-bop9c2werwerd7c6b5a2.testprodxcloud.space}"
+DOMAIN="${DOMAIN:-louis000c2d8b4eerbestbetter001.prodxcloud.space}"
 DOMAIN="${DOMAIN#https://}"
 DOMAIN="${DOMAIN#http://}"
 DOMAIN="${DOMAIN%%/*}"
@@ -713,7 +713,8 @@ fi
 
 # Pre-certbot connectivity check: verify domains are reachable from the internet via port 80
 log_info "Verifying $DOMAIN is reachable on port 80 before requesting SSL..."
-PRE_SSL_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://$DOMAIN/api/v2/health" 2>/dev/null || echo "000")
+PRE_SSL_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://$DOMAIN/api/v2/health" 2>/dev/null || true)
+PRE_SSL_CODE="${PRE_SSL_CODE:-000}"
 if [ "$PRE_SSL_CODE" = "000" ]; then
     log_error "Cannot reach http://$DOMAIN from this machine (HTTP $PRE_SSL_CODE)"
     log_error "Certbot WILL fail. Check: DNS A record, Security Group ports 80/443, nginx status"
@@ -994,17 +995,17 @@ fi
 # HTTP -> HTTPS redirect test
 echo ""
 log_info "Endpoint tests (vxnode):"
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://$DOMAIN/api/v2/health" 2>/dev/null || echo "000")
-HTTPS_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "https://$DOMAIN/api/v2/health" 2>/dev/null || echo "000")
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://$DOMAIN/api/v2/health" 2>/dev/null || true)
+HTTPS_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "https://$DOMAIN/api/v2/health" 2>/dev/null || true)
 log_info "  http://$DOMAIN  -> HTTP $HTTP_CODE (expect 301 redirect)"
 log_info "  https://$DOMAIN -> HTTP $HTTPS_CODE (expect 200)"
 
 log_info "Endpoint tests (IDE):"
-IDE_HTTPS_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 "https://$DOMAIN:$IDE_PORT/" 2>/dev/null || echo "000")
+IDE_HTTPS_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 "https://$DOMAIN:$IDE_PORT/" 2>/dev/null || true)
 log_info "  https://$DOMAIN:$IDE_PORT -> HTTP $IDE_HTTPS_CODE (expect 200 when IDE container is running)"
 
 log_info "Endpoint tests (OpenClaw):"
-OC_HTTPS_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 "https://$DOMAIN:$OPENCLAW_PORT/" 2>/dev/null || echo "000")
+OC_HTTPS_CODE=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 "https://$DOMAIN:$OPENCLAW_PORT/" 2>/dev/null || true)
 log_info "  https://$DOMAIN:$OPENCLAW_PORT -> HTTP $OC_HTTPS_CODE (expect 200 when OpenClaw gateway is running)"
 
 # =============================================================================

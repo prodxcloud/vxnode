@@ -1,0 +1,26 @@
+{
+  "_comment": "Exact mirror of tenant.yaml. Used by setup.sh only if a YAML parser (python3 PyYAML) is unavailable. tenant.yaml is the source of truth.",
+  "defaults": {
+    "email": "joelwembo@outlook.com",
+    "ssh_port": 22,
+    "docker_username": "vxcloud",
+    "docker_pat": "",
+    "app_port": 8744
+  },
+  "instances": [
+    {
+      "name": "louis000c2d8b4eerbestbetter001",
+      "ssh_host": "54.224.217.6",
+      "ssh_user": "ubuntu",
+      "ssh_key": "./files/louis000c2d8b4eerbestbetter001.pem",
+      "domain": "louis000c2d8b4eerbestbetter001.prodxcloud.space"
+    },
+    {
+      "name": "vps1",
+      "ssh_host": "34.87.72.177",
+      "ssh_user": "root",
+      "ssh_key": "./files/vpskey1.pem",
+      "domain": "services.vxai.site"
+    }
+  ]
+}
