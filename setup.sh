@@ -79,6 +79,10 @@ STAGE_RUNNER="_remote_stage_runner.sh"
 # adds the IDE to a live node without recreating anything. OpenClaw is left to
 # the admin (it needs provider auth) — not installed here.
 IDE_INSTALLER="tenant_codebase/openvscode-server-one-time-installer.sh"
+# Post-stage health assertion — proves the node (and IDE) actually serve. Runs
+# best-effort: it never aborts the run, it only marks an instance FAIL in the
+# summary if the node genuinely doesn't respond. See _verify_node.sh.
+VERIFY_SH="_verify_node.sh"
 
 C_B='\033[0;34m'; C_G='\033[0;32m'; C_Y='\033[1;33m'; C_R='\033[0;31m'; C_N='\033[0m'
 info(){ echo -e "${C_B}[setup]${C_N} $*"; }
@@ -244,6 +248,14 @@ install_one(){
                  true|1|yes|y|on) want_ide=1 ;;
              esac ;;
     esac
+    # What to assert at the end (best-effort): node health when we (re)deployed
+    # the node; the IDE when we installed it. Nothing to verify for prereq-only.
+    local verify_node=0 verify_ide=0
+    case "$STAGE" in
+        all)   verify_node=1; [ "$want_ide" -eq 1 ] && verify_ide=1 ;;
+        setup) verify_node=1 ;;
+        ide)   verify_ide=1 ;;
+    esac
 
     echo
     info "════ instance: ${name:-<unnamed>}   host=${ssh_host:-LOCAL}   domain=${domain:-<none>} ════"
@@ -266,6 +278,24 @@ install_one(){
             info "IDE setup ($IDE_INSTALLER) — separate container, does not touch vxnode ..."
             sudo ${IDE_ENV_ARGS[@]+"${IDE_ENV_ARGS[@]}"} bash "$SCRIPT_DIR/$IDE_INSTALLER" || die "openvscode-server install failed"
             ok "IDE setup complete (local)  ->  https://${domain:-localhost}:8443/?tkn=<connection_token>"
+        fi
+        # Final assertion: is it actually serving? (best-effort; never throws)
+        if [ "$verify_node" -eq 1 ] || [ "$verify_ide" -eq 1 ]; then
+            local _vrc=0
+            if [ -f "$SCRIPT_DIR/$VERIFY_SH" ]; then
+                info "Verifying ${name:-local} actually serves ..."
+                set +e
+                APP_PORT="$app_port" CHECK_IDE="$verify_ide" bash "$SCRIPT_DIR/$VERIFY_SH"
+                _vrc=$?
+                set -e
+            else
+                warn "$VERIFY_SH not found — skipping verification"
+            fi
+            if [ "$_vrc" -ne 0 ]; then
+                warn "verification FAILED — ${name:-local} did not serve as expected"
+                return 1
+            fi
+            [ -f "$SCRIPT_DIR/$VERIFY_SH" ] && ok "verification passed — ${name:-local} is serving"
         fi
         return 0
     fi
@@ -343,6 +373,24 @@ install_one(){
             "cd '$REMOTE_DIR' && $REMOTE_SUDO $IDE_REMOTE_ENV bash $STAGE_RUNNER $IDE_INSTALLER" \
             || die "remote openvscode-server install failed"
         ok "IDE ready on $ssh_host  ->  https://${domain}:8443/?tkn=<connection_token>"
+    fi
+
+    # Final assertion: did the node actually come up serving? Best-effort — runs
+    # on the VM against 127.0.0.1 (no DNS/SSL dependency), never aborts, and only
+    # flips this instance to FAIL in the summary if it genuinely doesn't respond.
+    if [ "$verify_node" -eq 1 ] || [ "$verify_ide" -eq 1 ]; then
+        info "Verifying ${name:-$ssh_host} actually serves ..."
+        local _vrc=0
+        set +e
+        "${SSH_BASE[@]}" -n "${SSH_OPTS[@]}" "$REMOTE" \
+            "cd '$REMOTE_DIR' && if [ -f $VERIFY_SH ]; then APP_PORT='$app_port' CHECK_IDE='$verify_ide' bash $VERIFY_SH; else echo '[verify] $VERIFY_SH not in bundle — skipping'; fi"
+        _vrc=$?
+        set -e
+        if [ "$_vrc" -ne 0 ]; then
+            warn "verification FAILED — ${name:-$ssh_host} did not serve as expected"
+            return 1
+        fi
+        ok "verification passed — ${name:-$ssh_host} is serving"
     fi
     return 0
 }
