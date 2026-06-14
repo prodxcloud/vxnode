@@ -33,8 +33,16 @@ LOG="$(mktemp "${TMPDIR:-/tmp}/vxnode-stage.XXXXXX")" || { echo "[stage-runner] 
 RC_FILE="$LOG.rc"
 
 # Run the stage in the background with BOTH std streams redirected to $LOG so a
-# daemon it leaves behind can never pin the SSH channel open.
-( bash "$TARGET" "$@" >"$LOG" 2>&1; echo "$?" >"$RC_FILE" ) &
+# daemon it leaves behind can never pin the SSH channel open. Also start it in a
+# NEW session via `setsid -w`: anything the stage backgrounds (the auto-update
+# unit, container helpers, …) then lands in its own session — not the SSH login
+# session — so it can't keep `sshd` alive and hang the run after it finished.
+# `-w` makes setsid wait and propagate the real exit code (and keeps tail -f live).
+if command -v setsid >/dev/null 2>&1; then
+    ( setsid -w bash "$TARGET" "$@" >"$LOG" 2>&1 </dev/null; echo "$?" >"$RC_FILE" ) &
+else
+    ( bash "$TARGET" "$@" >"$LOG" 2>&1 </dev/null; echo "$?" >"$RC_FILE" ) &
+fi
 STAGE_PID=$!
 
 # Stream live; tail exits as soon as the stage pid dies (GNU coreutils --pid).

@@ -857,14 +857,26 @@ systemctl reload nginx
 # =============================================================================
 log_info "Setting up SSL auto-renewal..."
 
-# Certbot installs a systemd timer or cron by default, but let's verify
-if systemctl list-timers | grep -q certbot; then
+# Auto-renewal is best-effort and must NEVER abort the install (set -euo pipefail
+# safe). Prefer certbot's own systemd timer (ships with the package); fall back to
+# a daily cron only if no timer unit exists.
+if systemctl list-unit-files 2>/dev/null | grep -q '^certbot\.timer'; then
+    systemctl enable --now certbot.timer >/dev/null 2>&1 || true
+    if systemctl is-active certbot.timer >/dev/null 2>&1; then
+        log_success "Certbot auto-renewal timer is active"
+    else
+        log_warn "certbot.timer present but not active — renewal may need manual setup"
+    fi
+elif systemctl list-timers 2>/dev/null | grep -q certbot; then
     log_success "Certbot auto-renewal timer is active"
 else
-    # Fallback: add cron job
+    # Fallback: a daily cron. `crontab -l` exits non-zero when there's no crontab
+    # yet and `grep -v` exits 1 on no match — guard BOTH so pipefail/-e is happy,
+    # and keep the whole thing non-fatal.
     CRON_CMD="0 3 * * * certbot renew --quiet --deploy-hook 'systemctl reload nginx'"
-    (crontab -l 2>/dev/null | grep -v certbot; echo "$CRON_CMD") | crontab -
-    log_success "Certbot renewal cron job installed (daily at 3 AM)"
+    { { crontab -l 2>/dev/null || true; } | { grep -v 'certbot renew' || true; }; echo "$CRON_CMD"; } | crontab - 2>/dev/null \
+        && log_success "Certbot renewal cron job installed (daily at 3 AM)" \
+        || log_warn "Could not install certbot renewal cron — set up renewal manually"
 fi
 
 # Test renewal (dry run)

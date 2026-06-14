@@ -23,7 +23,7 @@ defaults:
   email: joelwembo@outlook.com        # Let's Encrypt SSL contact (shared)
   ssh_port: 22
   docker_username: vxcloud            # image-pull user (demo)
-  docker_pat: "dckr_pat_7TNDpy6rX66v6ZSNIUfsL74M8ks"   # vxcloud Docker Hub pull token (vxcloud/vxnode is private)
+  docker_pat: ""   # vxcloud Docker Hub pull token (vxcloud/vxnode is private)
   app_port: 8744                      # vxnode API port
   connection_token: 99xctdev987654321098765   # IDE (openvscode) browser token — passed to the IDE installer
   install_ide: true                   # the `all` stage also installs the OpenVSCode IDE (separate container on :8443). OpenClaw is left to the admin (needs provider auth).
