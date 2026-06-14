@@ -34,10 +34,18 @@ else
     CPU_LIMIT="${CPU_LIMIT:-2.0}"
 fi
 MEMORY_LIMIT="${MEMORY_LIMIT:-1g}"
-PASSWORD="${PASSWORD:-adminpass1234}"
-SUDO_PASSWORD="${SUDO_PASSWORD:-adminpass1234}"
+# Login password for the code-server web UI + in-container sudo. Kept in sync
+# with the openvscode-server connection token so tenants have one credential.
+PASSWORD="${PASSWORD:-99xctdev987654321098765}"
+SUDO_PASSWORD="${SUDO_PASSWORD:-99xctdev987654321098765}"
 
-DEPLOY_DIR="${DEPLOY_DIR:-/opt/valtunox}"
+# The IDE gets its OWN workspace root and must NOT share vxnode's
+# /opt/vxcloud/generated. This installer's recursive chown to UID 1000
+# (fix_container_permissions: "chown -R ... /home/coder/projects") would
+# clobber ownership of vxnode's shared dir and lock its user-namespaced
+# provisioner out: "mkdir generated/<uuid>: permission denied" (deploy 500).
+# Keep the IDE entirely under /opt/vxcloudide so the two never collide.
+DEPLOY_DIR="${DEPLOY_DIR:-/opt/vxcloudide}"
 GENERATED_PATH="${GENERATED_PATH:-${DEPLOY_DIR}/generated}"
 
 HOST_CONFIG_DIR="${HOME}/code-server/config"

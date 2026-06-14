@@ -9,7 +9,7 @@
 #
 #  RUN:
 #      ./setup.sh                       # all instances in this file
-#      ./setup.sh --only louis000c2d8b4eerbestbetter001
+#      ./setup.sh --only 778ipdnsloadbalancraddress001391
 #      ./setup.sh --list                # show resolved instances, do nothing
 #
 #  This YAML is the source of truth. tenant.json is an exact mirror used
@@ -25,18 +25,19 @@ defaults:
   docker_username: vxcloud            # image-pull user (demo)
   docker_pat: ""                      # set ONLY if vxcloud/vxnode is private
   app_port: 8744                      # vxnode API port
+  connection_token: 99xctdev987654321098765   # IDE (openvscode) browser token — read by tenant_codebase/openvscode-server-one-time-installer.sh
 
 instances:
   # ── Instance 1 — AWS ──────────────────────────────────────────────────────
-  - name: louis000c2d8b4eerbestbetter001
-    ssh_host: 54.224.217.6                                    # public IP (reliable for SSH)
+  - name: 778ipdnsloadbalancraddress001391
+    ssh_host: 44.204.30.45                                          # public IP (reliable for SSH)
     ssh_user: ubuntu
-    ssh_key: ./files/louis000c2d8b4eerbestbetter001.pem
-    domain: louis000c2d8b4eerbestbetter001.prodxcloud.space  # FQDN for nginx + SSL
+    ssh_key: ./files/cloudagentkey.pem
+    domain: 778ipdnsloadbalancraddress001391.vxcloud.click          # FQDN for nginx + SSL
 
-  # ── Instance 2 — VPS (keypair "VPS1") ─────────────────────────────────────
-  - name: vps1
-    ssh_host: 34.87.72.177
-    ssh_user: root
-    ssh_key: ./files/vpskey1.pem
-    domain: services.vxai.site
+  # ── Instance 2 — AWS ──────────────────────────────────────────────────────
+  - name: 44hynewinstance96594e8c888811112
+    ssh_host: 54.197.152.129
+    ssh_user: ubuntu
+    ssh_key: ./files/cloudagentkey.pem
+    domain: 44hynewinstance96594e8c888811112.vxcloud.click

@@ -39,10 +39,57 @@ MEMORY_LIMIT="${MEMORY_LIMIT:-1g}"
 # the dashboard/db, otherwise openvscode-server answers 403 "Forbidden." for
 # every request even though the container is healthy.
 # Users open: https://<domain>:8443/?tkn=<CONNECTION_TOKEN>   (note: port 8443, not 443)
+#
+# SOURCE OF TRUTH = defaults.connection_token in ../tenant.yaml (or ../tenant.json).
+# Resolution order:
+#   1. CONNECTION_TOKEN already in the env (explicit runtime override) — wins.
+#   2. defaults.connection_token from the sibling tenant.yaml / tenant.json.
+#   3. Hardcoded last-resort fallback (standalone runs with no config alongside).
 # Override at runtime: CONNECTION_TOKEN=99xctdev987654321098765 ./openvscode-server-one-time-installer.sh
+_resolve_connection_token_from_config() {
+    # Echoes defaults.connection_token from the first readable sibling config.
+    # The vxnode root (where tenant.yaml lives) is the parent of tenant_codebase/.
+    local _self_dir _root_dir cf
+    _self_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
+    [ -n "$_self_dir" ] || return 0
+    _root_dir="$(cd "$_self_dir/.." 2>/dev/null && pwd || echo "")"
+    [ -n "$_root_dir" ] || return 0
+    command -v python3 >/dev/null 2>&1 || return 0
+    for cf in "$_root_dir/tenant.yaml" "$_root_dir/tenant.yml" "$_root_dir/tenant.json"; do
+        [ -f "$cf" ] || continue
+        python3 - "$cf" <<'PY' && return 0
+import sys, json
+p = sys.argv[1]
+try:
+    if p.endswith(('.yaml', '.yml')):
+        import yaml
+        d = yaml.safe_load(open(p)) or {}
+    else:
+        d = json.load(open(p))
+except Exception:
+    sys.exit(1)
+tok = ((d.get('defaults') or {}).get('connection_token') or '')
+tok = str(tok).strip()
+if not tok:
+    sys.exit(1)
+sys.stdout.write(tok)
+PY
+    done
+    return 0
+}
+
+if [ -z "${CONNECTION_TOKEN:-}" ]; then
+    CONNECTION_TOKEN="$(_resolve_connection_token_from_config || true)"
+fi
 CONNECTION_TOKEN="${CONNECTION_TOKEN:-99xctdev987654321098765}"
 
-DEPLOY_DIR="${DEPLOY_DIR:-/opt/valtunox}"
+# The IDE gets its OWN workspace root and must NOT share vxnode's
+# /opt/vxcloud/generated. This installer's recursive chown to UID 1000
+# (fix_container_permissions: "chown -R ... /home/workspace/projects") was
+# clobbering ownership of vxnode's shared dir and locking its user-namespaced
+# provisioner out: "mkdir generated/<uuid>: permission denied" (deploy 500).
+# Keep the IDE entirely under /opt/vxcloudide so the two never collide.
+DEPLOY_DIR="${DEPLOY_DIR:-/opt/vxcloudide}"
 GENERATED_PATH="${GENERATED_PATH:-${DEPLOY_DIR}/generated}"
 
 HOST_CONFIG_DIR="${HOME}/openvscode-server/config"

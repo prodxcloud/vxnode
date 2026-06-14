@@ -22,12 +22,13 @@ applications, and runs governed AI agents — on **your own VM or machine**.
 > **This repo holds the node's *deployment, setup & update tooling* — not the server source.**
 > The vxnode server ships only as a sealed, hardened multi-arch image —
 > [`vxcloud/vxnode`](https://hub.docker.com/r/vxcloud/vxnode) (`linux/amd64` + `linux/arm64`).
-> **To stand up a node:** clone this repo, fill your VM credentials into [`setup.sh`](./setup.sh),
-> and run it — on the VM itself, or from your laptop over SSH.
+> **To stand up one or many nodes:** clone this repo, list your VM(s) in
+> [`tenant.yaml`](./tenant.yaml) (or [`tenant.json`](./tenant.json)), and run
+> [`setup.sh`](./setup.sh) — on the VM itself, or from your laptop over SSH.
 
 ## 📋 Contents
 - [🚀 Quick start — one command](#-quick-start--one-command)
-- [⚙️ The `setup.sh` credentials block](#️-the-setupsh-credentials-block)
+- [⚙️ Configure your nodes — `tenant.yaml` / `tenant.json`](#️-configure-your-nodes--tenantyaml--tenantjson)
 - [🖥️ Local vs. remote install](#️-local-vs-remote-install)
 - [⚡ What a node does](#-what-a-node-does)
 - [📁 Repository layout](#-repository-layout)
@@ -45,81 +46,190 @@ applications, and runs governed AI agents — on **your own VM or machine**.
 
 ## 🚀 Quick start — one command
 
-Everything is driven by **[`setup.sh`](./setup.sh)**. Clone, fill in your VM
-credentials, run. It installs prerequisites and deploys the node for you.
+Everything is driven by **[`setup.sh`](./setup.sh)**, which reads your VM list
+from **[`tenant.yaml`](./tenant.yaml)** (or `tenant.json`). Clone, list your
+VM(s), run. It installs prerequisites and deploys the node on **every** instance.
 
 ```bash
 git clone https://github.com/prodxcloud/vxnode.git
 cd vxnode
-nano setup.sh            # fill in the VM CREDENTIALS block (see next section)
+nano tenant.yaml         # list your VM(s) — see "Configure your nodes" below
 chmod +x setup.sh
-./setup.sh
+./setup.sh               # installs EVERY instance in tenant.yaml
 ```
 
-`setup.sh` then runs, in order:
+For **each** instance in the file, `setup.sh` runs, in order:
 
 1. **`tenant_prerequisites.sh`** — Docker, Docker Compose, system packages, Python, networking tools.
 2. **`tenant_setup.sh`** — pulls the image, runs the container, configures Nginx, firewall, auto-update, and installs dev tools (incl. **vxcli**) inside the container.
 
-> 💡 **You only ever edit the credentials block at the top of `setup.sh`.** Nothing else.
+> 💡 **You only ever edit `tenant.yaml` (or `tenant.json`).** `setup.sh` itself
+> needs no editing — it's the source of truth for *which* VMs get a node.
+
+Handy flags:
+```bash
+./setup.sh --list                                   # show the resolved VM list, then exit (no install)
+./setup.sh --only 778ipdnsloadbalancraddress001391  # install just one instance (by name)
+./setup.sh --stage prereq                           # Docker/packages only — never touches a running node
+./setup.sh --stage setup                            # (re)deploy the node only — skip prerequisites
+./setup.sh tenant.json                              # force the JSON file instead of the YAML
+```
 
 ---
 
-## ⚙️ The `setup.sh` credentials block
+## ⚙️ Configure your nodes — `tenant.yaml` / `tenant.json`
 
-```bash
-# ##########################################################################
-# #  FILL THIS IN  —  VM CREDENTIALS                                       #
-# ##########################################################################
-#   Leave SSH_HOST EMPTY  -> install on THIS machine (local).
-#   Set SSH_HOST          -> install on that VM over SSH.
-#   Authenticate with EITHER a password OR a key (fill whichever you use).
+`setup.sh` is **config-driven**: it reads the list of VMs from a config file and
+installs the node on **every** one. You never edit `setup.sh` — you edit the
+config. Two equivalent files ship in the repo root:
 
-SSH_HOST=""        # VM public IP / hostname.    EMPTY = local install
-SSH_USER="ubuntu"  # SSH username (e.g. ubuntu, root, azureuser)
-SSH_PASSWORD=""    # SSH password   (needs `sshpass` on this machine)
-SSH_KEY=""         # OR path to a private key (.pem)
-SSH_PORT="22"      # SSH port (default 22)
+- **[`tenant.yaml`](./tenant.yaml)** — the **source of truth** (human-friendly, commented).
+- **[`tenant.json`](./tenant.json)** — an **exact mirror**, used automatically only
+  if the machine running `setup.sh` has no YAML parser (`python3` + PyYAML).
+  Keep both in sync, or just keep `tenant.yaml` and regenerate the JSON.
+
+> `setup.sh` picks the file in this order: an explicit arg (`./setup.sh tenant.json`)
+> → `tenant.yaml` → `tenant.yml` → `tenant.json`. If PyYAML is missing it falls
+> back to `tenant.json` on its own.
+
+### The real shipped `tenant.yaml`
+
+```yaml
+defaults:
+  email: joelwembo@outlook.com        # Let's Encrypt SSL contact (shared)
+  ssh_port: 22
+  docker_username: vxcloud            # image-pull user (demo)
+  docker_pat: ""                      # set ONLY if vxcloud/vxnode is private
+  app_port: 8744                      # vxnode API port
+  connection_token: 99xctdev987654321098765   # browser IDE token (openvscode)
+
+instances:
+  # ── Instance 1 — AWS ──────────────────────────────────────────────────────
+  - name: 778ipdnsloadbalancraddress001391
+    ssh_host: 44.204.30.45                                    # public IP (reliable for SSH)
+    ssh_user: ubuntu
+    ssh_key: ./files/cloudagentkey.pem
+    domain: 778ipdnsloadbalancraddress001391.vxcloud.click    # FQDN for nginx + SSL
+
+  # ── Instance 2 — AWS ──────────────────────────────────────────────────────
+  - name: 44hynewinstance96594e8c888811112
+    ssh_host: 54.197.152.129
+    ssh_user: ubuntu
+    ssh_key: ./files/cloudagentkey.pem
+    domain: 44hynewinstance96594e8c888811112.vxcloud.click
 ```
 
-| Field | Meaning |
-|---|---|
-| `SSH_HOST` | The VM's public IP or hostname. **Leave empty** to install on the machine you're running `setup.sh` from. |
-| `SSH_USER` | The SSH login user (`ubuntu` on most clouds, `azureuser` on some Azure images, `root` on bare VPS). |
-| `SSH_PASSWORD` | Password auth. Requires [`sshpass`](#password-auth-needs-sshpass) on the machine running `setup.sh`. |
-| `SSH_KEY` | Key auth — path to a `.pem`/private key. Use **either** this **or** `SSH_PASSWORD`. |
-| `SSH_PORT` | SSH port, default `22`. |
+The **same** config as `tenant.json` (used only when PyYAML is unavailable):
 
-The block below it (`DOMAIN`, `EMAIL`, Docker creds) is **optional** — leave it
-as-is. Set `DOMAIN`/`EMAIL` only if you want HTTPS on a real domain (see
-[SSL](#-what-setupsh-installs-step-by-step)). The Docker creds are demo values.
+```json
+{
+  "defaults": {
+    "email": "joelwembo@outlook.com",
+    "ssh_port": 22,
+    "docker_username": "vxcloud",
+    "docker_pat": "",
+    "app_port": 8744,
+    "connection_token": "99xctdev987654321098765"
+  },
+  "instances": [
+    {
+      "name": "778ipdnsloadbalancraddress001391",
+      "ssh_host": "44.204.30.45",
+      "ssh_user": "ubuntu",
+      "ssh_key": "./files/cloudagentkey.pem",
+      "domain": "778ipdnsloadbalancraddress001391.vxcloud.click"
+    },
+    {
+      "name": "44hynewinstance96594e8c888811112",
+      "ssh_host": "54.197.152.129",
+      "ssh_user": "ubuntu",
+      "ssh_key": "./files/cloudagentkey.pem",
+      "domain": "44hynewinstance96594e8c888811112.vxcloud.click"
+    }
+  ]
+}
+```
+
+### How `defaults` + `instances` work
+
+`defaults` apply to **every** instance. Any key set on an individual instance
+**overrides** the default for that instance only. So you set shared things
+(email, ports, Docker creds, IDE token) once in `defaults`, and only the
+per-VM differences (`name`, `ssh_host`, `ssh_key`, `domain`) on each instance.
+
+#### `defaults` keys
+
+| Key | Example | Meaning |
+|---|---|---|
+| `email` | `joelwembo@outlook.com` | Let's Encrypt contact for the SSL cert (shared across nodes). |
+| `ssh_port` | `22` | SSH port for every VM (override per-instance if one differs). |
+| `docker_username` | `vxcloud` | Docker Hub user used to pull the private `vxcloud/vxnode` image. |
+| `docker_pat` | `""` | Docker Hub access token — **only** needed if the image is private. Leave `""` for public/cached. |
+| `app_port` | `8744` | Port the node's API binds to (`127.0.0.1:8744` inside the VM; Nginx fronts it). |
+| `connection_token` | `99xctdev987654321098765` | Browser-IDE token read by [`tenant_codebase/openvscode-server-one-time-installer.sh`](./tenant_codebase/openvscode-server-one-time-installer.sh). See [Optional add-ons](#-optional-add-ons-agents-ide). |
+
+#### `instances` keys (per VM)
+
+| Key | Example | Meaning |
+|---|---|---|
+| `name` | `778ipdnsloadbalancraddress001391` | A unique label for the node. Used by `--only NAME` and in the run summary. |
+| `ssh_host` | `44.204.30.45` | The VM's public IP or hostname. **Leave blank to install on THIS machine** (local — no SSH). |
+| `ssh_user` | `ubuntu` | SSH login user (`ubuntu` on most clouds, `root` on bare VPS, `azureuser` on some Azure images). |
+| `ssh_key` | `./files/cloudagentkey.pem` | Path to the private key. Relative paths resolve against the repo root → put keys in [`files/`](./files/). |
+| `ssh_password` | *(omit)* | Use **instead of** `ssh_key` for password auth — needs [`sshpass`](#password-auth-needs-sshpass) on the machine running `setup.sh`. |
+| `domain` | `778ipdnsloadbalancraddress001391.vxcloud.click` | FQDN for Nginx + the Let's Encrypt cert. Its DNS **A-record must point at `ssh_host`** before SSL can be issued. |
+| `email`, `ssh_port`, `app_port`, … | *(inherited)* | Any `defaults` key can be repeated on an instance to override it just for that VM. |
+
+> ⚠️ **SSH keys are not committed.** The config references `./files/cloudagentkey.pem`,
+> but a `files/` directory holding the actual `.pem` is **not** in this repo — drop
+> your key(s) there yourself, `chmod 600`, before running. The two example
+> instances both share one key (`cloudagentkey.pem`); give each VM its own key by
+> setting a different `ssh_key` on each instance if you prefer.
+
+#### Add, remove, or target instances
+
+```bash
+# Add a third VM: copy an instances: block, change name/ssh_host/ssh_key/domain.
+./setup.sh --list                                   # dry-run: print what WILL be installed
+./setup.sh                                           # install ALL instances
+./setup.sh --only 44hynewinstance96594e8c888811112   # install just one (by name)
+./setup.sh --only 778...001391,44hy...11112          # install a comma-separated subset
+```
 
 #### Password auth needs `sshpass`
-If you fill `SSH_PASSWORD`, install `sshpass` on the machine that runs `setup.sh`:
+If an instance uses `ssh_password` instead of `ssh_key`, install `sshpass` on the
+machine that runs `setup.sh`:
 ```bash
-sudo apt-get install -y sshpass      # Ubuntu / Debian / WSL
+sudo apt-get install -y sshpass            # Ubuntu / Debian / WSL
 brew install hudochenkov/sshpass/sshpass   # macOS
 ```
-On Git Bash for Windows (no `sshpass`), use `SSH_KEY` instead.
+On Git Bash for Windows (no `sshpass`), use `ssh_key` instead.
 
 ---
 
 ## 🖥️ Local vs. remote install
 
-`setup.sh` works the same in both modes — only the credentials block differs.
+`setup.sh` works the same in both modes — the only difference is whether an
+instance's `ssh_host` is set.
 
-**Install on a remote VM** (run from your laptop):
-```bash
-SSH_HOST="203.0.113.10"   # the VM
-SSH_USER="ubuntu"
-SSH_PASSWORD="•••••"       # or SSH_KEY="~/keys/node.pem"
+**Install on a remote VM** (run from your laptop) — `ssh_host` is filled in:
+```yaml
+instances:
+  - name: node1
+    ssh_host: 44.204.30.45                 # the VM
+    ssh_user: ubuntu
+    ssh_key: ./files/cloudagentkey.pem      # or ssh_password: "•••••"
+    domain: node1.vxcloud.click
 ```
 `setup.sh` SSHes in, `tar`-streams this whole repo to `/tmp/vxnode-install` on
 the VM, then runs prerequisites → setup there.
 
-**Install on this machine** (run directly on the VM):
-```bash
-SSH_HOST=""               # empty = local
+**Install on this machine** (run directly on the VM) — leave `ssh_host` blank:
+```yaml
+instances:
+  - name: this-box
+    ssh_host:                               # empty = local, no SSH
+    domain: node1.vxcloud.click
 ```
 `setup.sh` runs prerequisites → setup right here, no SSH.
 
@@ -148,7 +258,10 @@ SSH_HOST=""               # empty = local
 
 ## 📁 Repository layout
 ```
-setup.sh                        # ⭐ START HERE — fill VM creds, run. Orchestrates the two below.
+setup.sh                        # ⭐ START HERE — reads tenant.yaml, orchestrates the two below for every VM.
+tenant.yaml                     # ⭐ EDIT THIS — your VM list (defaults + instances). Source of truth.
+tenant.json                     # exact mirror of tenant.yaml — fallback when PyYAML isn't available
+files/                          # put your SSH private keys here (e.g. cloudagentkey.pem) — NOT committed
 tenant_prerequisites.sh         # host prep: docker, compose, packages, python, networking
 tenant_setup.sh                 # deploy: pull image, run container, nginx, ssl, firewall, in-container tools
 tenant_setup_fix_missing_packages.sh   # repair a half-finished install (missing apt/apk pkgs)
@@ -191,7 +304,7 @@ DOCKERHUB.md · LICENSE · README.md
 | **Prerequisites** | Docker + Compose, base packages, Python, DNS/networking tools, registry auth. |
 | **1 · Container** | Pulls `vxcloud/vxnode:latest` (auto-falls-back to a known multi-arch digest if `:latest` is momentarily single-arch on arm64), runs it as `vxcloud-vxnode`, bound to `127.0.0.1:8744`. |
 | **2 · Nginx** | Installs and configures Nginx as a reverse proxy in front of the container. |
-| **3 · SSL** *(optional)* | If `DOMAIN`/`EMAIL` are set: Let's Encrypt cert via Certbot + auto-renewal. Skipped/best-effort otherwise — the node still serves on `http://127.0.0.1:8744`. |
+| **3 · SSL** *(optional)* | If the instance's `domain` (+ `defaults.email`) is set: Let's Encrypt cert via Certbot + auto-renewal. Skipped/best-effort otherwise — the node still serves on `http://127.0.0.1:8744`. |
 | **4 · Firewall** | UFW rules for `22`/`80`/`443`. |
 | **5 · Auto-update** | Installs the host updater + systemd timer so the node self-maintains (see [Auto-update](#-auto-update)). |
 | **6 · In-container tools** | Inside the container: Terraform, Node.js, Claude Code, Codex, Gemini, **and `vxcli`** — `vxcli` is fetched as a prebuilt binary from `https://vxcloud.io/download/cli/install.sh` (amd64/arm64, no build). |
@@ -236,6 +349,15 @@ sudo bash tenant_agents/tenant_install_ollama.sh
 sudo bash tenant_codebase/openvscode-server-one-time-installer.sh
 # or
 sudo bash tenant_codebase/code-server-one-time-installer.sh
+```
+Open it at `https://<domain>:8443/?tkn=<connection_token>`. The OpenVSCode
+installer resolves that token in this order: **(1)** a `CONNECTION_TOKEN=…` env
+var (explicit override), **(2)** `defaults.connection_token` from `tenant.yaml` /
+`tenant.json`, **(3)** a built-in fallback if neither is set — so the IDE always
+comes up with a working token. To use your own, set it once in `tenant.yaml`:
+```yaml
+defaults:
+  connection_token: my-secret-ide-token   # or override at runtime: CONNECTION_TOKEN=… ./openvscode-server-one-time-installer.sh
 ```
 
 ---
@@ -416,12 +538,16 @@ docker ps --filter name=vxcloud-vxnode               # should be "Up … (health
 
 | Symptom | Fix |
 |---|---|
-| `SSH connection failed` | Check `SSH_HOST/USER/PORT`, that port `22` is open in the VM firewall, and that the key/password is right. |
-| `sshpass not installed` | `sudo apt-get install -y sshpass` (or switch to `SSH_KEY`). |
+| `SSH connection failed` | Check the instance's `ssh_host` / `ssh_user` / `ssh_port` in `tenant.yaml`, that port `22` is open in the VM firewall, and that the key/password is right. `./setup.sh --list` prints exactly what was resolved. |
+| `ssh_key not found: ./files/…` | The `.pem` referenced in `tenant.yaml` isn't in `files/`. Drop your key there and `chmod 600` it. |
+| `sshpass not installed` | `sudo apt-get install -y sshpass` (or switch the instance to `ssh_key`). |
+| `no matching instances in tenant.yaml` | Your `--only NAME` doesn't match any instance `name`. Run `./setup.sh --list` to see the names. |
+| `PyYAML unavailable` | `setup.sh` auto-falls back to `tenant.json` — make sure it mirrors `tenant.yaml`. Or `pip install pyyaml`. |
 | `no matching manifest for linux/arm64` | Transient single-arch `:latest`; `tenant_setup.sh` auto-recovers via the multi-arch fallback digest. Re-run if needed. |
 | Container not healthy | `docker logs vxcloud-vxnode --tail 50`, then `docker rm -f vxcloud-vxnode && ./setup.sh`. |
 | Missing apt/apk packages | `sudo bash tenant_setup_fix_missing_packages.sh`. |
-| SSL failed | Ensure `DOMAIN`'s DNS A-record points at the VM and `80`/`443` are open, then re-run; or skip SSL and use the node over `127.0.0.1:8744`. |
+| SSL failed | Ensure the instance's `domain` DNS A-record points at its `ssh_host` and `80`/`443` are open, then re-run; or skip SSL and use the node over `127.0.0.1:8744`. |
+| IDE shows `403 Forbidden` | The `?tkn=` in the URL must match `defaults.connection_token` in `tenant.yaml` (the token the installer used). |
 
 ---
 
