@@ -2,3 +2,7 @@
 prerequisites_install.log
 .DS_Store
 generated/
+
+# Operator secrets — never commit
+files/
+*.pem
