@@ -43,7 +43,7 @@ Create a `.env` with the tenant credentials from your vxcloud account (names onl
 
 ```bash
 # .env
-VAULT_ADDR=https://vault.vxcloud.com
+VAULT_ADDR=https://vault.vxcloud.io
 VAULT_ROLE_ID=<your-approle-role-id>
 VAULT_SECRET_ID=<your-approle-secret-id>
 TENANT_ORGANIZATION=<your-org>
