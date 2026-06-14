@@ -59,6 +59,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREREQ_SH="tenant_prerequisites.sh"
 SETUP_SH="tenant_setup.sh"
+# Wrapper that runs a remote stage with its output redirected to a VM-local file
+# and streamed back via `tail --pid`, so a backgrounded process (e.g. the
+# auto-update unit firing mid-install) can't pin the SSH channel open and hang
+# the run after it has actually finished. See _remote_stage_runner.sh.
+STAGE_RUNNER="_remote_stage_runner.sh"
 
 C_B='\033[0;34m'; C_G='\033[0;32m'; C_Y='\033[1;33m'; C_R='\033[0;31m'; C_N='\033[0m'
 info(){ echo -e "${C_B}[setup]${C_N} $*"; }
@@ -155,11 +160,34 @@ load_rows(){ # $1=file  $2=only
     printf '%s\n' "$out"
 }
 
+# -- secure_key: echo a path to the key that has private (owner-only) perms.
+# OpenSSH refuses a key readable by group/other ("UNPROTECTED PRIVATE KEY FILE")
+# and silently falls back to no-key auth, which then fails. On Windows drvfs
+# under WSL (the /mnt/c mount) chmod is a no-op, so keys committed in ./files
+# stay 0444/0777 and ssh rejects them. Detect that and use a 0600 copy on a real
+# filesystem (TMPDIR) instead. Echoes the path to use; the caller cleans it up.
+secure_key(){ # $1=key path
+    local src="$1" perms dst
+    chmod 600 "$src" 2>/dev/null || true
+    perms="$(stat -c '%a' "$src" 2>/dev/null || echo 777)"
+    # Owner-only perms (last two octal digits 0) -> usable as-is.
+    if [ "${perms: -2}" = "00" ]; then printf '%s' "$src"; return 0; fi
+    dst="$(mktemp "${TMPDIR:-/tmp}/vxnode-key.XXXXXX")" || return 1
+    cat "$src" > "$dst" 2>/dev/null && chmod 600 "$dst" 2>/dev/null || { rm -f "$dst" 2>/dev/null; return 1; }
+    printf '%s' "$dst"
+}
+
 # -- install_one: prerequisites + tenant_setup for ONE instance (local or SSH).
 install_one(){
     local name="$1" ssh_host="$2" ssh_user="$3" ssh_password="$4" ssh_key="$5" \
           ssh_port="$6" domain="$7" email="$8" docker_username="$9" \
           docker_pat="${10}" app_port="${11}"
+    # Each instance runs in its own subshell (see run_rows), so this EXIT trap
+    # cleans up any 0600 key copy secure_key made, per instance. NOT 'local':
+    # the EXIT trap fires after install_one returns (the var must still exist),
+    # and the per-instance subshell keeps it isolated. ${x:-} keeps set -u happy.
+    _secured_key=""
+    trap '[ -n "${_secured_key:-}" ] && rm -f "${_secured_key:-}" 2>/dev/null || true' EXIT
     [ -n "$docker_username" ] || docker_username="vxcloud"
     [ -n "$ssh_port" ] || ssh_port="22"
     # Resolve a relative key path against the bundle directory.
@@ -211,7 +239,13 @@ install_one(){
         REMOTE_SUDO="echo '$ssh_password' | sudo -S -p ''"
     elif [ -n "$ssh_key" ]; then
         [ -f "$ssh_key" ] || die "ssh_key not found: $ssh_key"
-        chmod 600 "$ssh_key" 2>/dev/null || true
+        local _usekey
+        _usekey="$(secure_key "$ssh_key")" || die "could not secure private-key perms for $ssh_key"
+        if [ "$_usekey" != "$ssh_key" ]; then
+            _secured_key="$_usekey"
+            warn "key perms not enforceable on its filesystem (WSL /mnt/c?) — using a private 0600 copy"
+        fi
+        ssh_key="$_usekey"
         SSH_BASE=(ssh); SSH_OPTS+=(-i "$ssh_key"); REMOTE_SUDO="sudo"
     else
         SSH_BASE=(ssh); REMOTE_SUDO="sudo"
@@ -219,16 +253,22 @@ install_one(){
     fi
     local REMOTE="$ssh_user@$ssh_host" REMOTE_DIR="/tmp/vxnode-install"
 
+    # All non-piped ssh calls below use -n (stdin from /dev/null) so a remote
+    # command can never read the operator's terminal or the driver's row list.
     info "Testing SSH connection to $REMOTE ..."
-    "${SSH_BASE[@]}" "${SSH_OPTS[@]}" "$REMOTE" 'true' >/dev/null 2>&1 \
+    "${SSH_BASE[@]}" -n "${SSH_OPTS[@]}" "$REMOTE" 'true' >/dev/null 2>&1 \
         || die "SSH connection failed to $REMOTE (host/user/key/port? is port $ssh_port open?)"
     ok "SSH reachable"
 
     info "Copying install bundle to $REMOTE:$REMOTE_DIR ..."
-    "${SSH_BASE[@]}" "${SSH_OPTS[@]}" "$REMOTE" "rm -rf '$REMOTE_DIR' && mkdir -p '$REMOTE_DIR'" \
+    "${SSH_BASE[@]}" -n "${SSH_OPTS[@]}" "$REMOTE" "rm -rf '$REMOTE_DIR' && mkdir -p '$REMOTE_DIR'" \
         || die "could not prepare $REMOTE_DIR on the VM"
+    # NOTE: ./files holds the OPERATOR's SSH keys + cloud creds — it must NEVER
+    # be streamed to a tenant VM. No remote script reads it; exclude it (also
+    # keeps the bundle small). tenant.* configs are likewise operator-only.
     tar -czf - -C "$SCRIPT_DIR" \
         --exclude='.git' --exclude='*.log' \
+        --exclude='./files' --exclude='./tenant.yaml' --exclude='./tenant.yml' --exclude='./tenant.json' \
         --exclude='./vxcloud_vault/vault-consul' --exclude='vm-wipe-backup-*' . \
         | "${SSH_BASE[@]}" "${SSH_OPTS[@]}" "$REMOTE" "tar -xzf - -C '$REMOTE_DIR'" \
         || die "bundle copy failed"
@@ -236,16 +276,16 @@ install_one(){
 
     if [ "$STAGE" = prereq ] || [ "$STAGE" = all ]; then
         info "prerequisites on VM ..."
-        "${SSH_BASE[@]}" "${SSH_OPTS[@]}" "$REMOTE" \
-            "cd '$REMOTE_DIR' && $REMOTE_SUDO $REMOTE_ENV bash $PREREQ_SH" \
+        "${SSH_BASE[@]}" -n "${SSH_OPTS[@]}" "$REMOTE" \
+            "cd '$REMOTE_DIR' && $REMOTE_SUDO $REMOTE_ENV bash $STAGE_RUNNER $PREREQ_SH" \
             || die "remote prerequisites failed"
         ok "prerequisites complete on VM"
     fi
 
     if [ "$STAGE" = setup ] || [ "$STAGE" = all ]; then
         info "vxnode setup on VM ..."
-        "${SSH_BASE[@]}" "${SSH_OPTS[@]}" "$REMOTE" \
-            "cd '$REMOTE_DIR' && $REMOTE_SUDO $REMOTE_ENV bash $SETUP_SH" \
+        "${SSH_BASE[@]}" -n "${SSH_OPTS[@]}" "$REMOTE" \
+            "cd '$REMOTE_DIR' && $REMOTE_SUDO $REMOTE_ENV bash $STAGE_RUNNER $SETUP_SH" \
             || die "remote tenant_setup failed"
         ok "vxnode setup complete on $ssh_host"
     fi
@@ -257,7 +297,10 @@ declare -a SUMMARY=()
 run_rows(){ # $1 = TSV rows (one instance per line)
     local rows="$1" total=0 failed=0 rc
     local name ssh_host ssh_user ssh_password ssh_key ssh_port domain email docker_username docker_pat app_port
-    while IFS=$'\037' read -r name ssh_host ssh_user ssh_password ssh_key ssh_port domain email docker_username docker_pat app_port; do
+    # Read rows on FD 3, NOT stdin: install_one runs ssh, and ssh reads stdin —
+    # on stdin it would swallow the remaining rows and only the FIRST instance
+    # would ever install. FD 3 keeps the row list isolated from ssh.
+    while IFS=$'\037' read -r name ssh_host ssh_user ssh_password ssh_key ssh_port domain email docker_username docker_pat app_port <&3; do
         [ -n "${name}${ssh_host}" ] || continue
         total=$((total+1))
         set +e
@@ -271,7 +314,7 @@ run_rows(){ # $1 = TSV rows (one instance per line)
             SUMMARY+=("FAIL  ${name:-$ssh_host}  (${ssh_host:-local})  rc=$rc")
             failed=$((failed+1))
         fi
-    done <<< "$rows"
+    done 3<<< "$rows"
 
     echo
     info "──────── summary: $total instance(s), $failed failed ────────"

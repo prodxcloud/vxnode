@@ -264,6 +264,7 @@ tenant.json                     # exact mirror of tenant.yaml — fallback when 
 files/                          # put your SSH private keys here (e.g. cloudagentkey.pem) — NOT committed
 tenant_prerequisites.sh         # host prep: docker, compose, packages, python, networking
 tenant_setup.sh                 # deploy: pull image, run container, nginx, ssl, firewall, in-container tools
+_remote_stage_runner.sh         # internal: runs each remote stage so a backgrounded process can't hang ssh
 tenant_setup_fix_missing_packages.sh   # repair a half-finished install (missing apt/apk pkgs)
 
 install/
@@ -524,6 +525,26 @@ sudo CHANNEL_URL=https://vxcloud.io/download/vxnode/canary.json bash update/inst
 
 ---
 
+# Summary of deployment
+Successfully deployed certificate for 44hynewinstance96594e8c888811112.vxcloud.click to /etc/nginx/sites-enabled/vxcloud-tenant
+Congratulations! You have successfully enabled HTTPS on https://44hynewinstance96594e8c888811112.vxcloud.click
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+If you like Certbot, please consider supporting our work by:
+ * Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+ * Donating to EFF:                    https://eff.org/donate-le
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[OK] SSL certificate obtained and installed
+[OK] IDE Nginx enabled: https://44hynewinstance96594e8c888811112.vxcloud.click:8443 -> http://127.0.0.1:8089
+[OK] OpenClaw Nginx enabled: https://44hynewinstance96594e8c888811112.vxcloud.click:18789 -> http://127.0.0.1:18790
+[INFO] Setting up SSL auto-renewal...
+[OK] Certbot auto-renewal timer is active
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Processing
+/etc/letsencrypt/renewal/44hynewinstance96594e8c888811112.vxcloud.click.conf
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 ## ✅ Verify & 🩺 troubleshoot
 
 **Health & version**
@@ -539,15 +560,23 @@ docker ps --filter name=vxcloud-vxnode               # should be "Up … (health
 | Symptom | Fix |
 |---|---|
 | `SSH connection failed` | Check the instance's `ssh_host` / `ssh_user` / `ssh_port` in `tenant.yaml`, that port `22` is open in the VM firewall, and that the key/password is right. `./setup.sh --list` prints exactly what was resolved. |
+| `UNPROTECTED PRIVATE KEY FILE` / key ignored | Running from a Windows drive under WSL (`/mnt/c`), where `chmod 600` can't stick. **`setup.sh` handles this automatically** — it uses a private `0600` copy of the key and logs `using a private 0600 copy`. If you `ssh` by hand, copy the key to `~` and `chmod 600` first. |
 | `ssh_key not found: ./files/…` | The `.pem` referenced in `tenant.yaml` isn't in `files/`. Drop your key there and `chmod 600` it. |
 | `sshpass not installed` | `sudo apt-get install -y sshpass` (or switch the instance to `ssh_key`). |
 | `no matching instances in tenant.yaml` | Your `--only NAME` doesn't match any instance `name`. Run `./setup.sh --list` to see the names. |
+| `pull access denied` / image won't pull | `vxcloud/vxnode` is **private** — set `defaults.docker_pat` to a valid Docker Hub token. |
 | `PyYAML unavailable` | `setup.sh` auto-falls back to `tenant.json` — make sure it mirrors `tenant.yaml`. Or `pip install pyyaml`. |
 | `no matching manifest for linux/arm64` | Transient single-arch `:latest`; `tenant_setup.sh` auto-recovers via the multi-arch fallback digest. Re-run if needed. |
+| Run "hangs" at 100% after a node is healthy | Older `setup.sh` could hang when the auto-update unit fired mid-install and held the SSH channel. Fixed: each remote stage runs via `_remote_stage_runner.sh` (output streamed from a VM-local file), so `ssh` always returns. |
+| Only the first instance installed | Fixed: the driver loop reads the VM list on a separate file descriptor so `ssh` can't swallow the remaining instances. |
 | Container not healthy | `docker logs vxcloud-vxnode --tail 50`, then `docker rm -f vxcloud-vxnode && ./setup.sh`. |
 | Missing apt/apk packages | `sudo bash tenant_setup_fix_missing_packages.sh`. |
 | SSL failed | Ensure the instance's `domain` DNS A-record points at its `ssh_host` and `80`/`443` are open, then re-run; or skip SSL and use the node over `127.0.0.1:8744`. |
 | IDE shows `403 Forbidden` | The `?tkn=` in the URL must match `defaults.connection_token` in `tenant.yaml` (the token the installer used). |
+
+> 🔒 **Never shipped to tenant VMs:** `setup.sh` excludes `files/` (your SSH keys
+> + cloud creds) and `tenant.yaml`/`tenant.json` (the fleet inventory incl. the
+> Docker PAT) from the bundle it copies to each VM — only the install scripts go.
 
 ---
 
