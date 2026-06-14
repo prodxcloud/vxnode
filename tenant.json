@@ -6,7 +6,8 @@
     "docker_username": "vxcloud",
     "docker_pat": "dckr_pat_7TNDpy6rX66v6ZSNIUfsL74M8ks",
     "app_port": 8744,
-    "connection_token": "99xctdev987654321098765"
+    "connection_token": "99xctdev987654321098765",
+    "install_ide": true
   },
   "instances": [
     {

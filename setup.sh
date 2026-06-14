@@ -12,9 +12,13 @@
 #
 #  CONFIG  (YAML preferred; JSON used automatically if YAML can't be parsed)
 #    Edit tenant.yaml (or tenant.json). Schema:
-#      defaults:  { email, ssh_port, docker_username, docker_pat, app_port }
+#      defaults:  { email, ssh_port, docker_username, docker_pat, app_port,
+#                   connection_token, install_ide }
 #      instances: [ { name, ssh_host, ssh_user, ssh_key|ssh_password,
 #                     ssh_port, domain, email } , ... ]
+#    install_ide: true  -> the `all` stage also installs the OpenVSCode IDE
+#                          (a SEPARATE container; nginx proxies :8443 -> it).
+#    connection_token   -> the IDE browser token (passed to the IDE installer).
 #    Leave ssh_host blank on an instance to install on THIS machine (local).
 #
 #  CONFIG FILE SELECTION (how setup.sh decides which file to read)
@@ -29,9 +33,12 @@
 #    ./setup.sh --only NAME[,NAME2]   # just these instance(s)
 #    ./setup.sh --stage prereq        # Docker/packages only (safe; no vxnode redeploy)
 #    ./setup.sh --stage setup         # (re)deploy vxnode only
+#    ./setup.sh --stage ide           # add the OpenVSCode IDE only (does NOT touch a running vxnode)
 #    ./setup.sh --list                # print resolved instances, then exit
 #
-#  Requires next to this script: tenant_prerequisites.sh, tenant_setup.sh, and
+#  STAGES:  all (prereq+setup, +IDE if install_ide) | prereq | setup | ide
+#  Requires next to this script: tenant_prerequisites.sh, tenant_setup.sh,
+#  tenant_codebase/openvscode-server-one-time-installer.sh (for the IDE), and
 #  python3 (config parsing). For SSH: ssh, tar (+ sshpass only for passwords).
 # =============================================================================
 
@@ -50,6 +57,8 @@ EMAIL="${EMAIL:-joelwembo@outlook.com}"
 DOCKER_USERNAME="${DOCKER_USERNAME:-vxcloud}"
 DOCKER_PAT="${DOCKER_PAT:-}"
 APP_PORT="${APP_PORT:-}"
+CONNECTION_TOKEN="${CONNECTION_TOKEN:-}"   # IDE browser token (only used if installing the IDE)
+INSTALL_IDE="${INSTALL_IDE:-}"             # true -> also install the OpenVSCode IDE in the `all` stage
 
 # ##########################################################################
 # #  END FILL-IN — nothing to edit below this line                         #
@@ -64,6 +73,12 @@ SETUP_SH="tenant_setup.sh"
 # auto-update unit firing mid-install) can't pin the SSH channel open and hang
 # the run after it has actually finished. See _remote_stage_runner.sh.
 STAGE_RUNNER="_remote_stage_runner.sh"
+# Optional browser IDE (OpenVSCode Server). Deployed as its OWN container on
+# 127.0.0.1:8089 (nginx already proxies https://<domain>:8443 -> it from
+# tenant_setup.sh). It does NOT touch the vxnode container, so `--stage ide`
+# adds the IDE to a live node without recreating anything. OpenClaw is left to
+# the admin (it needs provider auth) — not installed here.
+IDE_INSTALLER="tenant_codebase/openvscode-server-one-time-installer.sh"
 
 C_B='\033[0;34m'; C_G='\033[0;32m'; C_Y='\033[1;33m'; C_R='\033[0;31m'; C_N='\033[0m'
 info(){ echo -e "${C_B}[setup]${C_N} $*"; }
@@ -76,10 +91,11 @@ die(){  echo -e "${C_R}[setup] x${C_N} $*" >&2; exit 1; }
 [ -f "$SCRIPT_DIR/$SETUP_SH" ]  || die "$SETUP_SH not found next to setup.sh ($SCRIPT_DIR)"
 
 # -- Arguments --
+# (IDE installer presence is validated lazily — only when a stage needs it.)
 CONFIG_FILE=""
 ONLY=""
 LIST_ONLY=0
-STAGE="all"     # all | prereq | setup  — which step(s) to run per instance
+STAGE="all"     # all | prereq | setup | ide  — which step(s) to run per instance
 while [ $# -gt 0 ]; do
     case "$1" in
         --only)        ONLY="${2:-}"; shift 2 ;;
@@ -88,13 +104,18 @@ while [ $# -gt 0 ]; do
         --stage=*)     STAGE="${1#*=}"; shift ;;
         --prereq-only) STAGE="prereq"; shift ;;   # Docker/packages only — does NOT touch a running vxnode
         --setup-only)  STAGE="setup";  shift ;;   # (re)deploy vxnode only — skips prerequisites
+        --ide-only)    STAGE="ide";    shift ;;   # add the OpenVSCode IDE only — does NOT touch a running vxnode
         --list|-l)     LIST_ONLY=1; shift ;;
         -h|--help)     sed -n '2,40p' "$0"; exit 0 ;;
         -*)            die "unknown option: $1 (try --help)" ;;
         *)             CONFIG_FILE="$1"; shift ;;
     esac
 done
-case "$STAGE" in all|prereq|setup) ;; *) die "invalid --stage '$STAGE' (use: all | prereq | setup)" ;; esac
+case "$STAGE" in all|prereq|setup|ide) ;; *) die "invalid --stage '$STAGE' (use: all | prereq | setup | ide)" ;; esac
+# The IDE stage (and `all` with install_ide) needs the OpenVSCode installer present.
+if [ "$STAGE" = ide ] || [ "$STAGE" = all ]; then
+    [ -f "$SCRIPT_DIR/$IDE_INSTALLER" ] || die "$IDE_INSTALLER not found (needed to install the IDE)"
+fi
 
 # -- Resolve config file (explicit arg → tenant.yaml → tenant.yml → tenant.json) --
 if [ -z "$CONFIG_FILE" ]; then
@@ -129,7 +150,8 @@ except Exception as e:
     sys.stderr.write("config parse error: %s\n" % e); sys.exit(2)
 defaults = data.get('defaults') or {}
 cols = ['name','ssh_host','ssh_user','ssh_password','ssh_key','ssh_port',
-        'domain','email','docker_username','docker_pat','app_port']
+        'domain','email','docker_username','docker_pat','app_port',
+        'connection_token','install_ide']
 onlyset = set(x.strip() for x in only.split(',') if x.strip()) if only else None
 n = 0
 for inst in (data.get('instances') or []):
@@ -181,7 +203,7 @@ secure_key(){ # $1=key path
 install_one(){
     local name="$1" ssh_host="$2" ssh_user="$3" ssh_password="$4" ssh_key="$5" \
           ssh_port="$6" domain="$7" email="$8" docker_username="$9" \
-          docker_pat="${10}" app_port="${11}"
+          docker_pat="${10}" app_port="${11}" connection_token="${12:-}" install_ide="${13:-}"
     # Each instance runs in its own subshell (see run_rows), so this EXIT trap
     # cleans up any 0600 key copy secure_key made, per instance. NOT 'local':
     # the EXIT trap fires after install_one returns (the var must still exist),
@@ -205,6 +227,24 @@ install_one(){
         ENV_ARGS+=("$k=$v"); REMOTE_ENV="$REMOTE_ENV $k='$v'"
     done
 
+    # IDE installer env. tenant.yaml is NOT shipped to the VM (operator-only), so
+    # the IDE's connection token MUST be passed explicitly — CONNECTION_TOKEN wins
+    # over the installer's config lookup/fallback.
+    local IDE_ENV_ARGS=() IDE_REMOTE_ENV=""
+    if [ -n "$connection_token" ]; then
+        IDE_ENV_ARGS+=("CONNECTION_TOKEN=$connection_token")
+        IDE_REMOTE_ENV="CONNECTION_TOKEN='$connection_token'"
+    fi
+    # Decide whether to install the IDE this run: always for `--stage ide`
+    # (explicit), and for `all` only when install_ide is truthy in the config.
+    local want_ide=0
+    case "$STAGE" in
+        ide) want_ide=1 ;;
+        all) case "$(printf '%s' "$install_ide" | tr '[:upper:]' '[:lower:]')" in
+                 true|1|yes|y|on) want_ide=1 ;;
+             esac ;;
+    esac
+
     echo
     info "════ instance: ${name:-<unnamed>}   host=${ssh_host:-LOCAL}   domain=${domain:-<none>} ════"
 
@@ -221,6 +261,11 @@ install_one(){
             info "vxnode setup ($SETUP_SH) ..."
             sudo "${ENV_ARGS[@]}" bash "$SCRIPT_DIR/$SETUP_SH" || die "tenant_setup failed"
             ok "vxnode setup complete (local)"
+        fi
+        if [ "$want_ide" -eq 1 ]; then
+            info "IDE setup ($IDE_INSTALLER) — separate container, does not touch vxnode ..."
+            sudo ${IDE_ENV_ARGS[@]+"${IDE_ENV_ARGS[@]}"} bash "$SCRIPT_DIR/$IDE_INSTALLER" || die "openvscode-server install failed"
+            ok "IDE setup complete (local)  ->  https://${domain:-localhost}:8443/?tkn=<connection_token>"
         fi
         return 0
     fi
@@ -289,6 +334,16 @@ install_one(){
             || die "remote tenant_setup failed"
         ok "vxnode setup complete on $ssh_host"
     fi
+
+    if [ "$want_ide" -eq 1 ]; then
+        # OpenVSCode Server — its own container on 127.0.0.1:8089; nginx already
+        # proxies :8443 -> it. Does NOT recreate or stop the vxnode container.
+        info "IDE (openvscode-server) on VM — separate container, vxnode untouched ..."
+        "${SSH_BASE[@]}" -n "${SSH_OPTS[@]}" "$REMOTE" \
+            "cd '$REMOTE_DIR' && $REMOTE_SUDO $IDE_REMOTE_ENV bash $STAGE_RUNNER $IDE_INSTALLER" \
+            || die "remote openvscode-server install failed"
+        ok "IDE ready on $ssh_host  ->  https://${domain}:8443/?tkn=<connection_token>"
+    fi
     return 0
 }
 
@@ -296,16 +351,17 @@ install_one(){
 declare -a SUMMARY=()
 run_rows(){ # $1 = TSV rows (one instance per line)
     local rows="$1" total=0 failed=0 rc
-    local name ssh_host ssh_user ssh_password ssh_key ssh_port domain email docker_username docker_pat app_port
+    local name ssh_host ssh_user ssh_password ssh_key ssh_port domain email docker_username docker_pat app_port connection_token install_ide
     # Read rows on FD 3, NOT stdin: install_one runs ssh, and ssh reads stdin —
     # on stdin it would swallow the remaining rows and only the FIRST instance
     # would ever install. FD 3 keeps the row list isolated from ssh.
-    while IFS=$'\037' read -r name ssh_host ssh_user ssh_password ssh_key ssh_port domain email docker_username docker_pat app_port <&3; do
+    while IFS=$'\037' read -r name ssh_host ssh_user ssh_password ssh_key ssh_port domain email docker_username docker_pat app_port connection_token install_ide <&3; do
         [ -n "${name}${ssh_host}" ] || continue
         total=$((total+1))
         set +e
         ( install_one "$name" "$ssh_host" "$ssh_user" "$ssh_password" "$ssh_key" \
-                      "$ssh_port" "$domain" "$email" "$docker_username" "$docker_pat" "$app_port" )
+                      "$ssh_port" "$domain" "$email" "$docker_username" "$docker_pat" "$app_port" \
+                      "$connection_token" "$install_ide" )
         rc=$?
         set -e
         if [ "$rc" -eq 0 ]; then
@@ -334,9 +390,9 @@ if [ -n "$CONFIG_FILE" ]; then
 
     if [ "$LIST_ONLY" -eq 1 ]; then
         info "Resolved instances:"
-        while IFS=$'\037' read -r name ssh_host ssh_user _pw ssh_key ssh_port domain _em _du _dp _ap; do
+        while IFS=$'\037' read -r name ssh_host ssh_user _pw ssh_key ssh_port domain _em _du _dp _ap _ct _ide; do
             [ -n "${name}${ssh_host}" ] || continue
-            echo "  • ${name:-<unnamed>}  host=${ssh_host:-LOCAL}  user=$ssh_user  key=${ssh_key:-<none>}  domain=${domain:-<none>}  port=${ssh_port:-22}"
+            echo "  • ${name:-<unnamed>}  host=${ssh_host:-LOCAL}  user=$ssh_user  key=${ssh_key:-<none>}  domain=${domain:-<none>}  port=${ssh_port:-22}  ide=${_ide:-<default>}"
         done <<< "$ROWS"
         exit 0
     fi
@@ -344,9 +400,10 @@ if [ -n "$CONFIG_FILE" ]; then
 else
     # ---- Legacy single-instance inline fallback (no config file present) ----
     warn "No tenant.yaml/tenant.json or config argument — using inline SSH_HOST variables."
-    ROW="$(printf '%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s' \
+    ROW="$(printf '%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s\037%s' \
         "inline" "$SSH_HOST" "$SSH_USER" "$SSH_PASSWORD" "$SSH_KEY" "$SSH_PORT" \
-        "$DOMAIN" "$EMAIL" "$DOCKER_USERNAME" "$DOCKER_PAT" "$APP_PORT")"
+        "$DOMAIN" "$EMAIL" "$DOCKER_USERNAME" "$DOCKER_PAT" "$APP_PORT" \
+        "${CONNECTION_TOKEN:-}" "${INSTALL_IDE:-}")"
     run_rows "$ROW"
 fi
 

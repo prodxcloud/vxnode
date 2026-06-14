@@ -72,8 +72,17 @@ Handy flags:
 ./setup.sh --only 778ipdnsloadbalancraddress001391  # install just one instance (by name)
 ./setup.sh --stage prereq                           # Docker/packages only — never touches a running node
 ./setup.sh --stage setup                            # (re)deploy the node only — skip prerequisites
+./setup.sh --stage ide                              # add the OpenVSCode IDE only — does NOT touch a running node
 ./setup.sh tenant.json                              # force the JSON file instead of the YAML
 ```
+
+> 💻 **Browser IDE (OpenVSCode) is part of `setup.sh`.** With `install_ide: true`
+> in `defaults`, the `all` stage installs it after the node; `--stage ide` adds it
+> to an already-running node. It runs as a **separate** `openvscode-server`
+> container (Nginx proxies `:8443` → it) and **never recreates `vxcloud-vxnode`**.
+> `setup.sh` passes `connection_token` to the installer, so the IDE is reachable
+> at `https://<domain>:8443/?tkn=<connection_token>`. OpenClaw stays admin-run
+> (it needs provider auth) — see [Optional add-ons](#-optional-add-ons-agents-ide).
 
 ---
 
@@ -166,7 +175,8 @@ per-VM differences (`name`, `ssh_host`, `ssh_key`, `domain`) on each instance.
 | `docker_username` | `vxcloud` | Docker Hub user used to pull the private `vxcloud/vxnode` image. |
 | `docker_pat` | `""` | Docker Hub access token — **only** needed if the image is private. Leave `""` for public/cached. |
 | `app_port` | `8744` | Port the node's API binds to (`127.0.0.1:8744` inside the VM; Nginx fronts it). |
-| `connection_token` | `99xctdev987654321098765` | Browser-IDE token read by [`tenant_codebase/openvscode-server-one-time-installer.sh`](./tenant_codebase/openvscode-server-one-time-installer.sh). See [Optional add-ons](#-optional-add-ons-agents-ide). |
+| `connection_token` | `99xctdev987654321098765` | Browser-IDE token. `setup.sh` passes it to the IDE installer as `CONNECTION_TOKEN`. Reachable at `https://<domain>:8443/?tkn=<token>`. |
+| `install_ide` | `true` | When `true`, the `all` stage also installs the OpenVSCode IDE (a **separate** container; never recreates the node). `--stage ide` does the same on demand. OpenClaw stays admin-run. |
 
 #### `instances` keys (per VM)
 
@@ -345,21 +355,26 @@ sudo bash tenant_agents/openclaw_vm_installer.sh --configure --telegram-token "1
 ```bash
 sudo bash tenant_agents/tenant_install_ollama.sh
 ```
-**Browser IDE** (code-server or OpenVSCode Server) — see `tenant_codebase/GUIDE.md`:
+**Browser IDE (OpenVSCode)** — **preferred path is via `setup.sh`** (config-driven):
 ```bash
-sudo bash tenant_codebase/openvscode-server-one-time-installer.sh
+./setup.sh --stage ide                 # add the IDE to every node, node container untouched
+./setup.sh --stage ide --only <name>   # just one node
+```
+With `install_ide: true` in `defaults`, the `all` stage installs it automatically.
+It runs as a **separate** `openvscode-server` container (Nginx proxies `:8443` → it)
+and **never recreates `vxcloud-vxnode`**. Open it at
+`https://<domain>:8443/?tkn=<connection_token>` (no token → `403`; with token → the editor).
+
+Running the installer **by hand on the VM** is still supported (e.g. for `code-server`):
+```bash
+sudo CONNECTION_TOKEN=99xctdev987654321098765 bash tenant_codebase/openvscode-server-one-time-installer.sh
 # or
 sudo bash tenant_codebase/code-server-one-time-installer.sh
 ```
-Open it at `https://<domain>:8443/?tkn=<connection_token>`. The OpenVSCode
-installer resolves that token in this order: **(1)** a `CONNECTION_TOKEN=…` env
-var (explicit override), **(2)** `defaults.connection_token` from `tenant.yaml` /
-`tenant.json`, **(3)** a built-in fallback if neither is set — so the IDE always
-comes up with a working token. To use your own, set it once in `tenant.yaml`:
-```yaml
-defaults:
-  connection_token: my-secret-ide-token   # or override at runtime: CONNECTION_TOKEN=… ./openvscode-server-one-time-installer.sh
-```
+The token resolves as: **(1)** `CONNECTION_TOKEN=…` env override → **(2)**
+`defaults.connection_token` from a sibling `tenant.yaml`/`tenant.json` → **(3)** a
+built-in fallback. Since `setup.sh` excludes `tenant.yaml` from the VM bundle, it
+passes `CONNECTION_TOKEN` for you; pass it yourself only for a manual install.
 
 ---
 
