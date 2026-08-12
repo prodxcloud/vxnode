@@ -200,8 +200,11 @@ The node, the CLI and all six SDKs share one version number — `2026.8.14`.
 
 | Tag | Description |
 |---|---|
-| `latest` | Current production build — multi-arch manifest (amd64 + arm64) |
-| `self-hosted` | Alias of the latest multi-arch manifest — same digest as `latest` |
+| `latest` | The only published tag — current production build, multi-arch manifest (amd64 + arm64) |
+
+One moving tag, on purpose: a second alias is one more thing that can quietly
+fall behind and hand somebody a stale node. If you need a build to stay put,
+pin the digest rather than trusting a tag not to move.
 
 Pin by digest if you need a build to stay put:
 
