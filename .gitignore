@@ -6,3 +6,8 @@ generated/
 # Operator secrets — never commit
 files/
 *.pem
+
+# Live operator credentials. tenant.json carries docker_pat + connection_token;
+# it was tracked until 2026-08-13, which put a Docker Hub PAT in a PUBLIC repo.
+# Copy tenant.json.example -> tenant.json and keep it local.
+tenant.json

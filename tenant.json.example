@@ -1,12 +1,12 @@
 {
-  "_comment": "Exact mirror of tenant.yaml. Used by setup.sh only if a YAML parser (python3 PyYAML) is unavailable. tenant.yaml is the source of truth.",
+  "_comment": "Copy to tenant.json and fill in your own values. tenant.json is gitignored because it holds live credentials (docker_pat, connection_token) - never commit it.",
   "defaults": {
     "email": "joelwembo@outlook.com",
     "ssh_port": 22,
     "docker_username": "vxcloud",
-    "docker_pat": "dckr_pat_7TNDpy6rX66v6ZSNIUfsL74M8ks",
+    "docker_pat": "<your-docker-pat>",
     "app_port": 8744,
-    "connection_token": "99xctdev987654321098765",
+    "connection_token": "<your-connection-token>",
     "install_ide": true
   },
   "instances": [
@@ -14,14 +14,14 @@
       "name": "778ipdnsloadbalancraddress001391",
       "ssh_host": "44.204.30.45",
       "ssh_user": "ubuntu",
-      "ssh_key": "./files/cloudagentkey.pem",
+      "ssh_key": "<your-ssh-key>",
       "domain": "778ipdnsloadbalancraddress001391.vxcloud.click"
     },
     {
       "name": "44hynewinstance96594e8c888811112",
       "ssh_host": "54.197.152.129",
       "ssh_user": "ubuntu",
-      "ssh_key": "./files/cloudagentkey.pem",
+      "ssh_key": "<your-ssh-key>",
       "domain": "44hynewinstance96594e8c888811112.vxcloud.click"
     }
   ]

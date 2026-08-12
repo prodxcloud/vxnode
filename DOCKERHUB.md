@@ -1,8 +1,8 @@
 # vxcloud/vxnode
 
 **The runtime node for the [vxcloud](https://vxcloud.io) platform** — one hardened
-container that provisions multi-cloud infrastructure, deploys applications, and
-runs governed AI agents on your own VM.
+container that provisions multi-cloud infrastructure, deploys applications, runs
+governed AI agents, and powers the **SalesShift** go-to-market stack on your own VM.
 
 ![Docker Pulls](https://img.shields.io/docker/pulls/vxcloud/vxnode?logo=docker&label=pulls&color=2496ED)
 ![Image Size](https://img.shields.io/docker/image-size/vxcloud/vxnode/latest?logo=docker&label=size&color=2496ED)
@@ -16,8 +16,10 @@ runs governed AI agents on your own VM.
 | Attribute | Details |
 |---|---|
 | **Docker image** | `vxcloud/vxnode:latest` |
+| **Version** | `2026.8.14` — same number as `vxcli` and every SDK |
 | **Publisher** | PRODXCLOUD |
 | **Tooling & source** | [github.com/prodxcloud/vxnode](https://github.com/prodxcloud/vxnode) |
+| **SDKs** | [github.com/prodxcloud/vxcloud](https://github.com/prodxcloud/vxcloud) |
 | **Architectures** | `linux/amd64`, `linux/arm64` (AWS Graviton · Azure Ampere) |
 | **Exposed port** | `8744` — HTTP API |
 | **Health check** | `GET /api/v2/health` |
@@ -35,7 +37,82 @@ runs governed AI agents on your own VM.
 - ☁️ **Multi-cloud provisioning** — AWS, Azure, Google Cloud, Linode, DigitalOcean — Terraform-native IaC
 - 🚢 **App & container deployment** — 14+ language stacks and Docker workloads over SSH, one-command HTTPS
 - 🤖 **Agentic DevOps** — policy-governed AI agents (Anthropic, OpenAI, Google Gemini)
+- 📈 **SalesShift GTM** — prospect pool, CRM, campaigns, opportunity signals and social distribution
 - 🔧 **One unified API** — CI/CD, networking, managed databases, storage, serverless, Kubernetes
+
+## 📈 SalesShift — the GTM stack, on your node
+
+Beyond infrastructure, this node serves **SalesShift**: the go-to-market layer of
+the platform. Same API, same auth, same audit trail as everything else it runs.
+
+| Surface | What it covers |
+|---|---|
+| **Prospect pool** | Search people and companies by seniority, department, headcount, geography. Addresses come back **masked** — revealing one spends quota, and you can price a batch before you spend it. |
+| **Leads → CRM** | A pool row is not mailable. Save it as a lead, convert it into a Contact, then it can be emailed. |
+| **Tracked email** | Sends through the org's own providers via a Go email worker — suppression gating, daily caps, warmup ramp, open/click tracking on a Kafka event stream. |
+| **Campaigns** | Create, schedule, send, and pull a per-recipient report with an hourly timeline. |
+| **Opportunities** | A cross-tenant signal pool scraped from real sources. Save, dismiss, or push straight into a lead. |
+| **Tasks** | Goal, progress and assignee on every row. |
+| **Social** | One goroutine per network — the fan-out reports a **measured** speedup, not a claimed one. |
+| **Webmaster** | URL inspect, robots.txt and sitemap checks, file generation. |
+| **Billing** | What the workspace pays for SalesShift: plans, subscription, seats, invoices, checkout. |
+
+Drive it from the CLI:
+
+```bash
+vxcli salesshift leads search --seniority c_level --country AU --limit 25
+vxcli salesshift leads quota
+vxcli salesshift leads reveal <pool-id>
+vxcli salesshift leads convert-from-pool <pool-id>… --lifecycle-stage lead
+vxcli salesshift leads enrich acme.com
+
+vxcli salesshift email send --to ada@acme.com --subject "…" --html "<p>…</p>"
+vxcli salesshift campaigns report <campaign-id>
+vxcli salesshift contacts list
+vxcli salesshift workflows test-run <id>
+vxcli salesshift sequences list
+
+vxcli salesshift opportunities list --source hn --min-score 70
+vxcli salesshift opportunities push-to-lead <id>
+vxcli salesshift tasks add --title "Follow up" --goal "Book a call"
+vxcli salesshift social post --content "…" && vxcli salesshift social send <post-id>
+vxcli salesshift webmaster inspect https://example.com
+vxcli salesshift billing plans
+```
+
+…or from any SDK:
+
+```python
+# Python
+import vxsdk
+ss = vxsdk.Client.load_from_vxcli().salesshift
+
+page = ss.search_leads(filters={"seniority": ["c_level"], "country": ["AU"]}, limit=50)
+ids  = [p["pool_person_id"] for p in page["results"][:10]]
+
+print(ss.reveal_quota())              # allowance / remaining / unlimited
+print(ss.preview_reveal_cost(ids))    # what this batch WOULD cost, before spending
+ss.save_leads(ids)
+print(vxsdk.describe_convert(ss.convert_from_pool(ids, lifecycle_stage="lead")))
+```
+
+```ts
+// TypeScript
+import { VxCloud } from '@vxcloud/sdk';
+const c = new VxCloud({ apiKey: process.env.VX_API_KEY! });
+
+const page = await c.leads.searchLeads({ filters: { country: ['AU'] }, limit: 50 });
+const { job } = await c.social.distribute(postId);
+console.log(`${job.speedup}x vs sequential`);
+
+// Every delivery carries `simulated` — a deployment holding no social API
+// credentials still returns delivery records. Surface it; never report a
+// simulated post as published.
+for (const d of job.deliveries) console.log(d.channel, d.simulated ? 'SIMULATED' : 'published');
+```
+
+Every quota field is **null when unlimited**, never `0` — a plain zero would read
+as "no allowance", the exact opposite of what the API means.
 
 ## 🐳 Run the container
 
@@ -104,20 +181,48 @@ docker compose up -d
 ```bash
 curl -fsSL https://vxcloud.io/download/cli/install.sh | sh   # macOS / Linux
 irm https://vxcloud.io/download/cli/install.ps1 | iex         # Windows
+vxcli version                                                 # -> 2026.8.14
 ```
-**SDKs**
-```bash
-npm install @vxcloud/sdk                 # TypeScript / Node
-pip install vxsdk                        # Python
-go get github.com/prodxcloud/vxcloud     # Go
-```
+
+**SDKs** — same wire contract, same auth model, same error taxonomy in every language.
+
+| Language | Package | Install |
+|---|---|---|
+| Python | [`vxsdk`](https://pypi.org/project/vxsdk/) · [`vxcloud`](https://pypi.org/project/vxcloud/) | `pip install vxsdk` |
+| TypeScript / Node | [`@vxcloud/sdk`](https://www.npmjs.com/package/@vxcloud/sdk) | `npm install @vxcloud/sdk` |
+| Go | [`github.com/prodxcloud/vxcloud`](https://github.com/prodxcloud/vxcloud) | `go get github.com/prodxcloud/vxcloud` |
+| C++ | [`cpp/`](https://github.com/prodxcloud/vxcloud/tree/main/cpp) | CMake, or drop in two files (libcurl, C++17) |
+| Java | [`java/`](https://github.com/prodxcloud/vxcloud/tree/main/java) | Maven, `io.vxcloud:vxsdk` (JDK 11+, zero deps) |
+
+The node, the CLI and all six SDKs share one version number — `2026.8.14`.
 
 ## 🏷️ Tags
 
 | Tag | Description |
 |---|---|
 | `latest` | Current production build — multi-arch manifest (amd64 + arm64) |
-| `self-hosted` | Alias of the latest multi-arch manifest |
+| `self-hosted` | Alias of the latest multi-arch manifest — same digest as `latest` |
+
+Pin by digest if you need a build to stay put:
+
+```bash
+docker pull vxcloud/vxnode@sha256:<digest>     # from `docker buildx imagetools inspect vxcloud/vxnode:latest`
+```
+
+## 👤 Author
+
+Built and maintained by **Joel O. Wembo**
+
+- 💼 LinkedIn: [linkedin.com/in/joelwembo](https://www.linkedin.com/in/joelwembo/)
+- 📧 Email: [joelwembo@outlook.com](mailto:joelwembo@outlook.com)
+
+## 🔗 Links
+
+- 📦 PyPI: [pypi.org/project/vxcloud](https://pypi.org/project/vxcloud/) · [pypi.org/project/vxsdk](https://pypi.org/project/vxsdk/)
+- 📦 npm: [npmjs.com/package/@vxcloud/sdk](https://www.npmjs.com/package/@vxcloud/sdk)
+- 📖 Documentation: [vxcloud.io/docs/sdks](https://vxcloud.io/docs/sdks)
+- 🛠️ Source & issues: [github.com/prodxcloud/vxcloud](https://github.com/prodxcloud/vxcloud)
+- 📝 Changelog: [CHANGELOG.md](https://github.com/prodxcloud/vxcloud/blob/main/CHANGELOG.md)
 
 ---
 

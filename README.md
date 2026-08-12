@@ -23,7 +23,7 @@ applications, and runs governed AI agents — on **your own VM or machine**.
 > The vxnode server ships only as a sealed, hardened multi-arch image —
 > [`vxcloud/vxnode`](https://hub.docker.com/r/vxcloud/vxnode) (`linux/amd64` + `linux/arm64`).
 > **To stand up one or many nodes:** clone this repo, list your VM(s) in
-> [`tenant.yaml`](./tenant.yaml) (or [`tenant.json`](./tenant.json)), and run
+> [`tenant.yaml`](./tenant.yaml) (or [`tenant.json`](./tenant.json.example)), and run
 > [`setup.sh`](./setup.sh) — on the VM itself, or from your laptop over SSH.
 
 ## 📋 Contents
@@ -31,6 +31,7 @@ applications, and runs governed AI agents — on **your own VM or machine**.
 - [⚙️ Configure your nodes — `tenant.yaml` / `tenant.json`](#️-configure-your-nodes--tenantyaml--tenantjson)
 - [🖥️ Local vs. remote install](#️-local-vs-remote-install)
 - [⚡ What a node does](#-what-a-node-does)
+- [📈 SalesShift — sales & marketing on your node](#-salesshift--sales--marketing-on-your-node)
 - [📁 Repository layout](#-repository-layout)
 - [🧰 What `setup.sh` installs (step by step)](#-what-setupsh-installs-step-by-step)
 - [🔁 Reinstall & 🔧 fix](#-reinstall--fix)
@@ -93,9 +94,16 @@ installs the node on **every** one. You never edit `setup.sh` — you edit the
 config. Two equivalent files ship in the repo root:
 
 - **[`tenant.yaml`](./tenant.yaml)** — the **source of truth** (human-friendly, commented).
-- **[`tenant.json`](./tenant.json)** — an **exact mirror**, used automatically only
+- **`tenant.json`** — an **exact mirror**, used automatically only
   if the machine running `setup.sh` has no YAML parser (`python3` + PyYAML).
   Keep both in sync, or just keep `tenant.yaml` and regenerate the JSON.
+
+> 🔐 **`tenant.json` is gitignored** — it carries `docker_pat` and
+> `connection_token`. Start from the committed
+> **[`tenant.json.example`](./tenant.json.example)**:
+> `cp tenant.json.example tenant.json`, then fill in your own values. Do the
+> same for any secret in `tenant.yaml`. Credentials belong in `files/` (also
+> gitignored), never in a tracked file — this repo is public.
 
 > `setup.sh` picks the file in this order: an explicit arg (`./setup.sh tenant.json`)
 > → `tenant.yaml` → `tenant.yml` → `tenant.json`. If PyYAML is missing it falls
@@ -252,7 +260,82 @@ instances:
 - ☁️ **Multi-cloud provisioning** — AWS, Azure, GCP, Linode, DigitalOcean (Terraform-native IaC)
 - 🚢 **App & container deployment** — language stacks and Docker workloads over SSH
 - 🤖 **Agentic DevOps** — policy-governed AI agents (Anthropic, OpenAI, Google Gemini)
+- 📈 **SalesShift — sales & marketing** — prospect pool, CRM, tracked email, campaigns,
+  opportunity signals, social distribution ([details below](#-salesshift--sales--marketing-on-your-node))
 - 🔧 **CI/CD, networking, databases, storage, serverless** — one unified API
+
+## 📈 SalesShift — sales & marketing on your node
+
+The node is not only infrastructure. It also serves **SalesShift**, the
+go-to-market side of the platform — same API, same auth, same audit trail as
+everything else it runs.
+
+| Surface | What it covers |
+|---|---|
+| **Prospect pool** | Search people and companies by seniority, department, headcount, geography. Addresses come back **masked**; revealing one spends metered quota, and you can price a batch before you spend it. |
+| **Leads → CRM** | A pool row is **not mailable**. Save it as a lead, convert it into a Contact, and only then can it be emailed — that conversion is where consent metadata is written. |
+| **Tracked email** | Sends through the org's own providers via the node's Go email worker — suppression gating, daily caps, warmup ramp, open/click tracking on a Kafka event stream. |
+| **Campaigns** | Create, schedule, send, and pull a per-recipient report with an hourly timeline. |
+| **Opportunities** | A cross-tenant signal pool scraped from real sources. Save, dismiss, or push straight into a lead. |
+| **Tasks** | Goal, progress and assignee on every row. |
+| **Social** | One goroutine per network; the fan-out reports a **measured** speedup, not a claimed one. |
+| **Webmaster / SEO** | URL inspect, robots.txt and sitemap checks, file generation. |
+| **Billing** | What the workspace pays for SalesShift: plans, subscription, seats, invoices, checkout. |
+
+The email worker runs **on this node** — `GET /api/v2/salesshift/email/health`
+reports it. Everything else above is served by the control plane under
+`/api/v1/salesshift/*`, so it works the moment your node is registered.
+
+Drive it from the CLI:
+
+```bash
+vxcli salesshift leads search --seniority c_level --country AU --limit 25
+vxcli salesshift leads quota                       # allowance / remaining / unlimited
+vxcli salesshift leads reveal <pool-id>            # spends quota
+vxcli salesshift leads convert-from-pool <pool-id>… --lifecycle-stage lead
+vxcli salesshift leads enrich acme.com
+
+vxcli salesshift email send --to ada@acme.com --subject "…" --html "<p>…</p>"
+vxcli salesshift email stats
+vxcli salesshift campaigns report <campaign-id>
+vxcli salesshift contacts list
+vxcli salesshift sequences list
+
+vxcli salesshift opportunities list --source hn --min-score 70
+vxcli salesshift tasks add --title "Follow up" --goal "Book a call"
+vxcli salesshift social post --content "…" && vxcli salesshift social send <post-id>
+vxcli salesshift webmaster inspect https://example.com
+vxcli salesshift billing plans
+```
+
+…or from any SDK — here Python:
+
+```python
+import vxsdk
+
+ss = vxsdk.Client.load_from_vxcli().salesshift
+
+page = ss.search_leads(filters={"seniority": ["c_level"], "country": ["AU"]}, limit=50)
+ids  = [p["pool_person_id"] for p in page["results"][:10]]
+
+print(ss.reveal_quota())              # allowance -1 + unlimited True == uncapped
+print(ss.preview_reveal_cost(ids))    # what this batch WOULD cost, before spending
+ss.save_leads(ids)
+print(vxsdk.describe_convert(ss.convert_from_pool(ids, lifecycle_stage="lead")))
+
+ss.send_email("ada@acme.com", "Quick question", "<p>Hi Ada…</p>")
+```
+
+Three things the API means literally, and that cost money or credibility when
+missed:
+
+- A **masked** address is not an address. Never send to one.
+- A quota `allowance` of `-1` with `unlimited: true` means **uncapped**, not
+  "exhausted". Plan quotas use `null` for unlimited — a `0` would read as the
+  exact opposite.
+- Every social delivery carries `simulated`. A deployment holding no social API
+  credentials still returns delivery records; reporting a simulated post as
+  published is the one unforgivable lie.
 
 ## 🧩 The vxcloud ecosystem
 
@@ -263,6 +346,12 @@ instances:
 | 📦 **SDK · TypeScript** | `npm install @vxcloud/sdk` | [npm](https://www.npmjs.com/package/@vxcloud/sdk) |
 | 🐍 **SDK · Python** | `pip install vxsdk` *(or `vxcloud`)* | [PyPI](https://pypi.org/project/vxsdk/) |
 | 🐹 **SDK · Go** | `go get github.com/prodxcloud/vxcloud` | [pkg.go.dev](https://pkg.go.dev/github.com/prodxcloud/vxcloud) |
+| ⚙️ **SDK · C++** | CMake, or drop in two files *(libcurl, C++17)* | [cpp/](https://github.com/prodxcloud/vxcloud/tree/main/cpp) |
+| ☕ **SDK · Java** | Maven `io.vxcloud:vxsdk` *(JDK 11+, zero deps)* | [java/](https://github.com/prodxcloud/vxcloud/tree/main/java) |
+
+The node, `vxcli` and every SDK share one version number — currently
+**`2026.8.14`**. `vxcli version` and `pip show vxsdk` should agree; if they do
+not, something is stale.
 
 ---
 
@@ -270,7 +359,9 @@ instances:
 ```
 setup.sh                        # ⭐ START HERE — reads tenant.yaml, orchestrates the two below for every VM.
 tenant.yaml                     # ⭐ EDIT THIS — your VM list (defaults + instances). Source of truth.
-tenant.json                     # exact mirror of tenant.yaml — fallback when PyYAML isn't available
+tenant.json.example             # ⭐ COPY THIS to tenant.json — placeholders, safe to commit
+tenant.json                     # exact mirror of tenant.yaml — fallback when PyYAML isn't available.
+                                #   GITIGNORED: holds docker_pat + connection_token.
 files/                          # put your SSH private keys here (e.g. cloudagentkey.pem) — NOT committed
 tenant_prerequisites.sh         # host prep: docker, compose, packages, python, networking
 tenant_setup.sh                 # deploy: pull image, run container, nginx, ssl, firewall, in-container tools
@@ -602,11 +693,25 @@ curl -fsSL https://vxcloud.io/download/cli/install.sh | sh   # macOS / Linux →
 irm https://vxcloud.io/download/cli/install.ps1 | iex         # Windows
 vxcli version
 ```
-**SDKs**
+**SDKs** — same wire contract and error taxonomy in every language.
 ```bash
 npm install @vxcloud/sdk                 # TypeScript / Node
 pip install vxsdk                        # Python (or: pip install vxcloud)
 go get github.com/prodxcloud/vxcloud     # Go
+# C++  — CMake, or drop in two files: github.com/prodxcloud/vxcloud/tree/main/cpp
+# Java — Maven io.vxcloud:vxsdk (JDK 11+): github.com/prodxcloud/vxcloud/tree/main/java
+```
+
+Infrastructure and go-to-market both, from the same client:
+
+```python
+import vxsdk
+c = vxsdk.Client.load_from_vxcli()
+
+c.deploy.container(host="…", ssh_user="ubuntu", key_pair_name="…",
+                   image="grafana/grafana:latest", ports=["3000:3000"])
+
+c.salesshift.send_email("ada@acme.com", "Quick question", "<p>Hi Ada…</p>")
 ```
 
 ---
@@ -615,6 +720,6 @@ go get github.com/prodxcloud/vxcloud     # Go
 
 **[vxcloud.io](https://vxcloud.io)** · [Docs](https://vxcloud.io/docs) · [CLI](https://vxcloud.io/download/cli) · [SDK](https://github.com/prodxcloud/vxcloud) · [Docker Hub](https://hub.docker.com/r/vxcloud/vxnode)
 
-© PRODXCLOUD — built by [Joel O. Wembo](https://github.com/joelwembo || https://www.linkedin.com/in/joelwembo/ )
+© PRODXCLOUD — built by **Joel O. Wembo** · [GitHub](https://github.com/joelwembo) · [LinkedIn](https://www.linkedin.com/in/joelwembo/) · [joelwembo@outlook.com](mailto:joelwembo@outlook.com)
 
 </div>
