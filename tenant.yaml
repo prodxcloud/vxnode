@@ -25,7 +25,7 @@ defaults:
   docker_username: vxcloud            # image-pull user (demo)
   docker_pat: ""   # vxcloud Docker Hub pull token (vxcloud/vxnode is private)
   app_port: 8744                      # vxnode API port
-  connection_token: 99xctdev987654321098765   # IDE (openvscode) browser token — passed to the IDE installer
+  connection_token: CHANGE_ME_SET_YOUR_OWN_TOKEN   # IDE (openvscode) browser token — passed to the IDE installer
   install_ide: true                   # the `all` stage also installs the OpenVSCode IDE (separate container on :8443). OpenClaw is left to the admin (needs provider auth).
 
 instances:

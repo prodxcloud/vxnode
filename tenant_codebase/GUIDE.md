@@ -31,7 +31,7 @@ Frontend (localhost:3000)          Go Backend (localhost:8744)          OpenVSCo
 - 2GB RAM minimum (4GB recommended)
 - Terraform installed on the host (for Go backend execution)
 - Go backend (Instanode Box) running on port 8744
-- Infinity API running on port 8741
+- VxCloud API running on port 8741
 
 ## Quick Start
 
@@ -370,7 +370,7 @@ Refreshing the page preserves the active session. Sharing the URL opens that ses
 
 ### Session Workflow
 
-1. **Your Sessions** table shows all cloud operations fetched from the Infinity API
+1. **Your Sessions** table shows all cloud operations fetched from the VxCloud API
 2. Click **Run** on any session row to open it in the embedded OpenVSCode Server iframe
 3. OpenVSCode Server loads the session folder at `/home/workspace/projects/generated/{session_id}`
 4. Edit Terraform files (`main.tf`, `variables.tf`, `providers.tf`, etc.) directly in the browser
@@ -510,7 +510,7 @@ docker restart openvscode-server
 
 | Endpoint | Backend | Purpose |
 |----------|---------|---------|
-| `GET /api/v3/provisioner/cloud/operations` | Infinity (8741) | List user sessions |
+| `GET /api/v3/provisioner/cloud/operations` | VxCloud (8741) | List user sessions |
 | `GET /api/v2/tenant/session/files/all` | Go (8744) | Fetch session files |
 | `POST /api/v2/tenant/session/terraform/reapply` | Go (8744) | Run terraform init + apply |
 | `POST /api/v2/tenant/session/file` | Go (8744) | Create/update a file |

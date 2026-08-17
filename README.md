@@ -118,7 +118,7 @@ defaults:
   docker_username: vxcloud            # image-pull user (demo)
   docker_pat: ""                      # set ONLY if vxcloud/vxnode is private
   app_port: 8744                      # vxnode API port
-  connection_token: 99xctdev987654321098765   # browser IDE token (openvscode)
+  connection_token: CHANGE_ME_SET_YOUR_OWN_TOKEN   # browser IDE token (openvscode)
 
 instances:
   # ── Instance 1 — AWS ──────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ The **same** config as `tenant.json` (used only when PyYAML is unavailable):
     "docker_username": "vxcloud",
     "docker_pat": "",
     "app_port": 8744,
-    "connection_token": "99xctdev987654321098765"
+    "connection_token": "CHANGE_ME_SET_YOUR_OWN_TOKEN"
   },
   "instances": [
     {
@@ -183,7 +183,7 @@ per-VM differences (`name`, `ssh_host`, `ssh_key`, `domain`) on each instance.
 | `docker_username` | `vxcloud` | Docker Hub user used to pull the private `vxcloud/vxnode` image. |
 | `docker_pat` | `""` | Docker Hub access token — **only** needed if the image is private. Leave `""` for public/cached. |
 | `app_port` | `8744` | Port the node's API binds to (`127.0.0.1:8744` inside the VM; Nginx fronts it). |
-| `connection_token` | `99xctdev987654321098765` | Browser-IDE token. `setup.sh` passes it to the IDE installer as `CONNECTION_TOKEN`. Reachable at `https://<domain>:8443/?tkn=<token>`. |
+| `connection_token` | `CHANGE_ME_SET_YOUR_OWN_TOKEN` | Browser-IDE token. `setup.sh` passes it to the IDE installer as `CONNECTION_TOKEN`. Reachable at `https://<domain>:8443/?tkn=<token>`. |
 | `install_ide` | `true` | When `true`, the `all` stage also installs the OpenVSCode IDE (a **separate** container; never recreates the node). `--stage ide` does the same on demand. OpenClaw stays admin-run. |
 
 #### `instances` keys (per VM)
@@ -350,8 +350,28 @@ missed:
 | ☕ **SDK · Java** | Maven `io.vxcloud:vxsdk` *(JDK 11+, zero deps)* | [java/](https://github.com/prodxcloud/vxcloud/tree/main/java) |
 
 The node, `vxcli` and every SDK share one version number — currently
-**`2026.8.14`**. `vxcli version` and `pip show vxsdk` should agree; if they do
+**`2026.8.17`**. `vxcli version` and `pip show vxsdk` should agree; if they do
 not, something is stale.
+
+### ⚠️ Breaking in `2026.8.17` — the Infinity env vars were renamed
+
+The control plane is called **VxCloud** everywhere now. The old `INFINITY_*`
+names are **gone, not deprecated** — nothing reads them any more, so anything
+still setting them will silently fall back to defaults rather than error.
+
+| Old (no longer read) | New |
+|---|---|
+| `VX_INFINITY_URL`, `INFINITY_URL` | **`VXCLOUD_URL`** |
+| `INFINITY_API_URL` | `VXCLOUD_API_URL` |
+| `INFINITY_WS_URL` | `VXCLOUD_WS_URL` |
+| `NEXT_PUBLIC_INFINITY_API_URL` | `NEXT_PUBLIC_VXCLOUD_API_URL` |
+| `NEXT_PUBLIC_INFINITY_WS_URL` | `NEXT_PUBLIC_VXCLOUD_WS_URL` |
+| `INFINITY_SERVICE_TOKEN` | `VXCLOUD_SERVICE_TOKEN` |
+
+`VX_INFINITY_URL` and `INFINITY_URL` used to be a primary + legacy-alias pair;
+they collapse into the single `VXCLOUD_URL`. The node pair `VX_NODE_URL` /
+`NODE_URL` is unchanged. Grep your CI configs, `.env` files and shell profiles
+for `INFINITY_` before upgrading.
 
 ---
 
@@ -458,7 +478,7 @@ and **never recreates `vxcloud-vxnode`**. Open it at
 
 Running the installer **by hand on the VM** is still supported (e.g. for `code-server`):
 ```bash
-sudo CONNECTION_TOKEN=99xctdev987654321098765 bash tenant_codebase/openvscode-server-one-time-installer.sh
+sudo CONNECTION_TOKEN=CHANGE_ME_SET_YOUR_OWN_TOKEN bash tenant_codebase/openvscode-server-one-time-installer.sh
 # or
 sudo bash tenant_codebase/code-server-one-time-installer.sh
 ```

@@ -36,8 +36,8 @@ fi
 MEMORY_LIMIT="${MEMORY_LIMIT:-1g}"
 # Login password for the code-server web UI + in-container sudo. Kept in sync
 # with the openvscode-server connection token so tenants have one credential.
-PASSWORD="${PASSWORD:-99xctdev987654321098765}"
-SUDO_PASSWORD="${SUDO_PASSWORD:-99xctdev987654321098765}"
+PASSWORD="${PASSWORD:-$(openssl rand -hex 16)}"
+SUDO_PASSWORD="${SUDO_PASSWORD:-$(openssl rand -hex 16)}"
 
 # The IDE gets its OWN workspace root and must NOT share vxnode's
 # /opt/vxcloud/generated. This installer's recursive chown to UID 1000

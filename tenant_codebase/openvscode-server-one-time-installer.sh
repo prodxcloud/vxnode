@@ -45,7 +45,7 @@ MEMORY_LIMIT="${MEMORY_LIMIT:-1g}"
 #   1. CONNECTION_TOKEN already in the env (explicit runtime override) — wins.
 #   2. defaults.connection_token from the sibling tenant.yaml / tenant.json.
 #   3. Hardcoded last-resort fallback (standalone runs with no config alongside).
-# Override at runtime: CONNECTION_TOKEN=99xctdev987654321098765 ./openvscode-server-one-time-installer.sh
+# Override at runtime: CONNECTION_TOKEN=CHANGE_ME_SET_YOUR_OWN_TOKEN ./openvscode-server-one-time-installer.sh
 _resolve_connection_token_from_config() {
     # Echoes defaults.connection_token from the first readable sibling config.
     # The vxnode root (where tenant.yaml lives) is the parent of tenant_codebase/.
@@ -81,7 +81,7 @@ PY
 if [ -z "${CONNECTION_TOKEN:-}" ]; then
     CONNECTION_TOKEN="$(_resolve_connection_token_from_config || true)"
 fi
-CONNECTION_TOKEN="${CONNECTION_TOKEN:-99xctdev987654321098765}"
+CONNECTION_TOKEN="${CONNECTION_TOKEN:-CHANGE_ME_SET_YOUR_OWN_TOKEN}"
 
 # The IDE gets its OWN workspace root and must NOT share vxnode's
 # /opt/vxcloud/generated. This installer's recursive chown to UID 1000
