@@ -1,8 +1,8 @@
 {
   "image": "vxcloud/vxnode",
   "tag": "latest",
-  "version": "v2026.8.17",
-  "digest": "sha256:4a03e8e1ed83f4baf645c5f14d101a2edfe466f8b90ecd248bfac6638d82760c",
+  "version": "v2026.8.26",
+  "digest": "sha256:bd99602288fbea80e3a540cd4ee0be42b14262d428232ce108754c543daedfb7",
   "min_interval_seconds": 300,
-  "notes": "v2026.8.17 — multi-arch, MODE=prod. Fleet polls every 5 min."
+  "notes": "v2026.8.26 — multi-arch, MODE=prod. Fleet polls every 5 min."
 }
