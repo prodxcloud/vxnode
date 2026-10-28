@@ -880,7 +880,13 @@ else
 fi
 
 # Test renewal (dry run)
-certbot renew --dry-run 2>/dev/null && log_success "Renewal dry-run passed" || log_warn "Renewal dry-run failed (cert may not be installed yet)"
+# The dry-run is only a readiness check.  Bound it so a transient ACME/DNS
+# response cannot hold the whole multi-VM rollout indefinitely.
+if timeout 120s certbot renew --dry-run 2>/dev/null; then
+    log_success "Renewal dry-run passed"
+else
+    log_warn "Renewal dry-run failed or timed out (cert may still be installed)"
+fi
 
 # =============================================================================
 # STEP 7: FIREWALL (UFW)
@@ -1097,6 +1103,9 @@ log_info "  https://$DOMAIN:$OPENCLAW_PORT -> HTTP $OC_HTTPS_CODE (expect 200 wh
 # =============================================================================
 # STEP 8: INSTALL BASE PACKAGES & DEV TOOLS INSIDE CONTAINER
 # =============================================================================
+if [ "${SKIP_CONTAINER_TOOLS:-0}" = "1" ]; then
+    log_info "SKIP_CONTAINER_TOOLS=1 — leaving the published runtime image unchanged"
+else
 log_info "============================================"
 log_info "  INSTALLING TOOLS INSIDE CONTAINER"
 log_info "============================================"
@@ -1251,6 +1260,7 @@ for cmd in claude codex gemini vxcli; do
         log_warn "  [container] $cmd — not installed (optional)"
     fi
 done
+fi
 
 echo ""
 log_info "============================================"

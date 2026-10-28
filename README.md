@@ -350,7 +350,8 @@ missed:
 | ☕ **SDK · Java** | Maven `io.vxcloud:vxsdk` *(JDK 11+, zero deps)* | [java/](https://github.com/prodxcloud/vxcloud/tree/main/java) |
 
 The node, `vxcli` and every SDK share one version number — currently
-**`2026.8.17`**. `vxcli version` and `pip show vxsdk` should agree; if they do
+**`2026.10.28`**. The current multi-architecture production image is
+`v2026.10.28-0500`; `vxcli version` and `pip show vxsdk` should agree; if they do
 not, something is stale.
 
 ### ⚠️ Breaking in `2026.8.17` — the Infinity env vars were renamed

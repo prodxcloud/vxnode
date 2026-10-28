@@ -23,22 +23,45 @@ defaults:
   email: joelwembo@outlook.com        # Let's Encrypt SSL contact (shared)
   ssh_port: 22
   docker_username: vxcloud            # image-pull user (demo)
-  docker_pat: ""   # vxcloud Docker Hub pull token (vxcloud/vxnode is private)
+  docker_pat: ""   # leave blank for the public vxcloud/vxnode image
   app_port: 8744                      # vxnode API port
   connection_token: CHANGE_ME_SET_YOUR_OWN_TOKEN   # IDE (openvscode) browser token — passed to the IDE installer
-  install_ide: true                   # the `all` stage also installs the OpenVSCode IDE (separate container on :8443). OpenClaw is left to the admin (needs provider auth).
+  install_ide: false                  # keep the distribution focused on the vxnode runtime
 
 instances:
-  # ── Instance 1 — AWS ──────────────────────────────────────────────────────
-  - name: 778ipdnsloadbalancraddress001391
-    ssh_host: 44.204.30.45                                          # public IP (reliable for SSH)
-    ssh_user: ubuntu
-    ssh_key: ./files/cloudagentkey.pem
-    domain: 778ipdnsloadbalancraddress001391.vxcloud.click          # FQDN for nginx + SSL
+  # The relay node (node-8mlh0qaqg6 / 51.79.206.57) is deliberately omitted.
+  - name: node-3hhzlzai2r
+    ssh_host: 51.79.205.88
+    ssh_user: root
+    ssh_key: ./files/vpskey1
+    domain: node-3hhzlzai2r.vxcloud.click
 
-  # ── Instance 2 — AWS ──────────────────────────────────────────────────────
-  - name: 44hynewinstance96594e8c888811112
-    ssh_host: 54.197.152.129
+  - name: node-7xv6vcu02m
+    ssh_host: 51.79.204.142
+    ssh_user: root
+    ssh_key: ./files/vpskey1
+    domain: node-7xv6vcu02m.vxcloud.click
+
+  - name: node-v4vfm9rl0i
+    ssh_host: 51.79.207.178
+    ssh_user: root
+    ssh_key: ./files/vpskey1
+    domain: node-v4vfm9rl0i.vxcloud.click
+
+  - name: node-d7dn652i3t
+    ssh_host: 51.79.206.173
+    ssh_user: root
+    ssh_key: ./files/vpskey1
+    domain: node-d7dn652i3t.vxcloud.click
+
+  - name: node-ry29hpvu3n
+    ssh_host: 57.129.114.162
     ssh_user: ubuntu
-    ssh_key: ./files/cloudagentkey.pem
-    domain: 44hynewinstance96594e8c888811112.vxcloud.click
+    ssh_key: ./files/vpskey1
+    domain: node-ry29hpvu3n.vxcloud.click
+
+  - name: node-y12ogfbcho
+    ssh_host: 37.60.242.115
+    ssh_user: root
+    ssh_key: ./files/vpskey1
+    domain: node-y12ogfbcho.vxcloud.click

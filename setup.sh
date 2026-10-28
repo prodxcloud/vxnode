@@ -224,6 +224,11 @@ install_one(){
     # Build the env passed to the tenant scripts (only values that are set).
     local ENV_ARGS=("DOCKER_USERNAME=$docker_username")
     local REMOTE_ENV="DOCKER_USERNAME='$docker_username'"
+    # Runtime-only rollouts can skip optional in-container CLI downloads.  The
+    # default remains unchanged for full development installs.
+    if [ "${SKIP_CONTAINER_TOOLS:-0}" = "1" ]; then
+        REMOTE_ENV="$REMOTE_ENV SKIP_CONTAINER_TOOLS=1"
+    fi
     local kv k v
     for kv in "DOCKER_PAT=$docker_pat" "DOMAIN=$domain" "EMAIL=$email" "APP_PORT=$app_port"; do
         k="${kv%%=*}"; v="${kv#*=}"
