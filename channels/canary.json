@@ -2,7 +2,7 @@
   "image": "vxcloud/vxnode",
   "tag": "latest",
   "version": "v2026.10.29-1932",
-  "digest": "sha256:ee6b237943750ee7d842e7196d6117c7992758c2cf21699a6b369832ace2e012",
+  "digest": "sha256:f2f110e5cfb293a2d95a3da3e54bbe79c18e1ec643ff88a6525558d44d9c62a1",
   "min_interval_seconds": 300,
   "notes": "canary mirrors stable (single prod stage) — same digest/version as stable.json (v2026.10.29-1932)."
 }
