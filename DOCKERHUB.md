@@ -18,6 +18,7 @@ governed AI agents, and powers the **SalesShift** go-to-market stack on your own
 | **Docker image** | `vxcloud/vxnode:latest` |
 | **Version** | `2026.10.29` — same CalVer release as `vxcli`, the desktop app and every SDK |
 | **Image release** | `v2026.10.29-1932` — amd64 hotfix layered on the prior multi-arch production build and published to `latest` |
+| **Manifest digest** | `sha256:f2f110e5cfb293a2d95a3da3e54bbe79c18e1ec643ff88a6525558d44d9c62a1` |
 | **Publisher** | PRODXCLOUD |
 | **Tooling & source** | [github.com/prodxcloud/vxnode](https://github.com/prodxcloud/vxnode) |
 | **SDKs** | [github.com/prodxcloud/vxcloud](https://github.com/prodxcloud/vxcloud) |
