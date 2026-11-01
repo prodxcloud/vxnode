@@ -264,6 +264,39 @@ instances:
   opportunity signals, social distribution ([details below](#-salesshift--sales--marketing-on-your-node))
 - 🔧 **CI/CD, networking, databases, storage, serverless** — one unified API
 
+## 🧭 Platform architecture and port map
+
+The node is the tenant-owned execution edge of VxCloud. The browser, `vxcli`
+and SDKs authenticate against the FastAPI control plane (`8741`), which resolves
+the workspace, billing entitlements and selected node. The Go core (`8743`)
+coordinates cloud/provisioning operations; this node's Go API (`8744`) runs
+VxComputer, Terraform/Docker deployment, the node-local CLI and the SalesShift
+email worker. Nginx/Cloudflare terminates TLS in front of the node; the
+container should normally remain bound to `127.0.0.1:8744`.
+
+| Port | Service | Notes |
+|---:|---|---|
+| `8744` | vxnode / VxComputer | `/api/v2/health` and `/api/v2/version`; public node hostname is Nginx/Cloudflare-fronted |
+| `8745` | VxThinkingLLM | local reasoning service used by chat/agents when routed |
+| `8746` | optional legacy VxThinking specialist | only present on deployments that explicitly expose the sidecar |
+| `8443` | OpenVSCode/code-server HTTPS route | Nginx proxies to the node-local IDE backend on `8089` |
+| `8089` | OpenVSCode backend | loopback-only; do not publish directly |
+| `18789` | OpenClaw gateway | optional add-on; install/configure separately |
+| `80/443` | Nginx + Certbot/Cloudflare | node domain ingress and TLS |
+
+The control-plane dependencies are normally private services: FastAPI `8741`,
+Django/admin `8742`, Go core `8743`, alerts `8014`, Temporal `7233`, Vault
+`8200`, Consul `8500`, Kafka `9092`, Redis `6379`, PostgreSQL `5432` and
+Ollama `11434`. Do not open those ports on a tenant VM just because they exist
+in the platform map; use the Cloudflare/QuickDoc deployment guide for the
+actual ingress policy.
+
+When a workspace has more than one node, the UI's selected node is the default
+route. Chat and messaging may target another owned node with `@nodes <hostname>`;
+the control plane still checks workspace ownership before dispatching the turn.
+After a node purchase, use **Sync With Workspace** and then verify both the
+node health route and the developer-key exchange before calling it ready.
+
 ## 📈 SalesShift — sales & marketing on your node
 
 The node is not only infrastructure. It also serves **SalesShift**, the
@@ -350,9 +383,10 @@ missed:
 | ☕ **SDK · Java** | Maven `io.vxcloud:vxsdk` *(JDK 11+, zero deps)* | [java/](https://github.com/prodxcloud/vxcloud/tree/main/java) |
 
 The node, `vxcli` and every SDK share one version number — currently
-**`2026.10.29`**. The current production image is
-`v2026.10.29-1932`; `vxcli version` and `pip show vxsdk` should agree; if they do
-not, something is stale.
+**`2026.11.1`**. The stable channel currently points at
+`v2026.11.1-0527` (the multi-arch digest is recorded in
+[`channels/stable.json`](./channels/stable.json)); `vxcli version` and
+`pip show vxsdk` should agree; if they do not, something is stale.
 
 ### ⚠️ Breaking in `2026.8.17` — the Infinity env vars were renamed
 
@@ -452,6 +486,37 @@ docker exec vxcloud-vxnode vxcli version     # the CLI is live inside the contai
   ```bash
   docker rm -f vxcloud-vxnode && ./setup.sh           # recreate the container
   ```
+
+### Health-gated repair order
+
+Use the smallest repair that matches the symptom; keep the mounted `.env` and
+`generated/` data before recreating anything:
+
+```bash
+docker ps --filter name=vxcloud-vxnode
+curl -fsS http://127.0.0.1:8744/api/v2/health
+curl -fsS http://127.0.0.1:8744/api/v2/version
+docker logs vxcloud-vxnode --tail 100
+sudo nginx -t && sudo systemctl status nginx --no-pager
+```
+
+1. If Docker or packages are missing, run `tenant_setup_fix_missing_packages.sh`.
+2. If only configuration drifted, rerun `./setup.sh --only <name>` (or the
+   appropriate `--stage`) and repeat the health/version checks.
+3. If the image is unhealthy, inspect logs, verify the `.env` mount, and use
+   `docker compose up -d` or the clean recreate above. Do not run a broad
+   `docker system prune --volumes` on a customer node without a backup and
+   explicit approval.
+4. If the node is healthy but stale, use `update/vxnode-update.sh`; it pulls the
+   channel digest, recreates the container, health-gates it and rolls back on
+   failure. Pin a digest while debugging a release.
+5. If HTTPS fails, check DNS, ports `80/443`, Nginx and Certbot/Cloudflare state
+   before deleting certificates. A successful local `8744` check alone does not
+   prove that the public hostname is reachable.
+
+After repair, use **Sync With Workspace** in the VxCloud Nodes page and verify
+the developer-key exchange. A running Docker container without the correct
+workspace/tenant binding is not a ready node.
 
 ---
 
