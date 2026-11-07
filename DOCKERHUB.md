@@ -16,9 +16,9 @@ governed AI agents, and powers the **SalesShift** go-to-market stack on your own
 | Attribute | Details |
 |---|---|
 | **Docker image** | `vxcloud/vxnode:latest` |
-| **Version** | `2026.10.29` — same CalVer release as `vxcli`, the desktop app and every SDK |
-| **Image release** | `v2026.10.29-1932` — amd64 hotfix layered on the prior multi-arch production build and published to `latest` |
-| **Manifest digest** | `sha256:f2f110e5cfb293a2d95a3da3e54bbe79c18e1ec643ff88a6525558d44d9c62a1` |
+| **Version** | `2026.11.8` — same CalVer release as `vxcli`, the desktop app and every SDK |
+| **Image release** | `v2026.11.8-0050` — fresh multi-arch production build published to `latest` |
+| **Manifest digest** | `sha256:3fec305faf755fce7dee4d66e41cfcbc433216de02e5d77e776e17387ab69bb6` |
 | **Publisher** | PRODXCLOUD |
 | **Tooling & source** | [github.com/prodxcloud/vxnode](https://github.com/prodxcloud/vxnode) |
 | **SDKs** | [github.com/prodxcloud/vxcloud](https://github.com/prodxcloud/vxcloud) |
@@ -183,7 +183,7 @@ docker compose up -d
 ```bash
 curl -fsSL https://vxcloud.io/download/cli/install.sh | sh   # macOS / Linux
 irm https://vxcloud.io/download/cli/install.ps1 | iex         # Windows
-vxcli version                                                 # -> 2026.10.29
+vxcli version                                                 # -> 2026.11.8
 ```
 
 **SDKs** — same wire contract, same auth model, same error taxonomy in every language.
@@ -196,7 +196,7 @@ vxcli version                                                 # -> 2026.10.29
 | C++ | [`cpp/`](https://github.com/prodxcloud/vxcloud/tree/main/cpp) | CMake, or drop in two files (libcurl, C++17) |
 | Java | [`java/`](https://github.com/prodxcloud/vxcloud/tree/main/java) | Maven, `io.vxcloud:vxsdk` (JDK 11+, zero deps) |
 
-The node, the CLI, the desktop app and all six SDKs share one version number — `2026.10.29`.
+The node, the CLI, the desktop app and all six SDKs share one version number — `2026.11.8`.
 
 ## 🏷️ Tags
 

@@ -1,8 +1,8 @@
 {
   "image": "vxcloud/vxnode",
   "tag": "latest",
-  "version": "v2026.10.29-1932",
-  "digest": "sha256:f2f110e5cfb293a2d95a3da3e54bbe79c18e1ec643ff88a6525558d44d9c62a1",
+  "version": "v2026.11.8-0050",
+  "digest": "sha256:3fec305faf755fce7dee4d66e41cfcbc433216de02e5d77e776e17387ab69bb6",
   "min_interval_seconds": 300,
-  "notes": "v2026.10.29-1932 — amd64 hotfix layered on the prior multi-arch production image; fleet polls every 5 min."
+  "notes": "v2026.11.8-0050 — multi-arch, MODE=prod. Fleet polls every 5 min."
 }

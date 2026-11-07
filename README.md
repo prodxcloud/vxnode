@@ -383,8 +383,8 @@ missed:
 | ☕ **SDK · Java** | Maven `io.vxcloud:vxsdk` *(JDK 11+, zero deps)* | [java/](https://github.com/prodxcloud/vxcloud/tree/main/java) |
 
 The node, `vxcli` and every SDK share one version number — currently
-**`2026.11.1`**. The stable channel currently points at
-`v2026.11.1-0527` (the multi-arch digest is recorded in
+**`2026.11.8`**. The stable channel currently points at
+`v2026.11.8-0050` (the multi-arch digest is recorded in
 [`channels/stable.json`](./channels/stable.json)); `vxcli version` and
 `pip show vxsdk` should agree; if they do not, something is stale.
 
